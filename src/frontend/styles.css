@@ -1,0 +1,259 @@
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --text: #f8fafc;
+  --text-dim: #94a3b8;
+  --accent: #38bdf8;
+  --accent2: #818cf8;
+  --danger: #f87171;
+  --success: #4ade80;
+  --radius: 12px;
+  --font: system-ui, -apple-system, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* ── Player Bar ── */
+.player-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--surface2);
+  flex-shrink: 0;
+}
+
+.track-info { flex: 1; min-width: 0; }
+.track-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-artist { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.player-controls { display: flex; gap: 4px; }
+.ctrl-btn {
+  width: 32px; height: 32px;
+  border: none; border-radius: 50%;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.ctrl-btn:hover { background: var(--accent); }
+.ctrl-btn.lg { width: 44px; height: 44px; font-size: 18px; }
+
+.play-btn { background: var(--accent); }
+
+.volume-slider-container { width: 70px; }
+input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--surface2);
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1;
+  padding: 10px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Content ── */
+.content { flex: 1; overflow: hidden; position: relative; }
+
+.tab-panel {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tab-panel.active { display: flex; }
+
+/* ── Chat Panel ── */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message { max-width: 85%; padding: 10px 14px; border-radius: var(--radius); line-height: 1.5; }
+.message.user { align-self: flex-end; background: var(--accent); color: #0f172a; }
+.message.assistant { align-self: flex-start; background: var(--surface2); }
+.message.system { align-self: center; background: transparent; color: var(--text-dim); font-size: 12px; }
+
+.chat-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--surface2);
+  background: var(--surface);
+}
+#chat-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+#chat-input:focus { border-color: var(--accent); }
+.send-btn {
+  padding: 10px 18px;
+  border: none; border-radius: var(--radius);
+  background: var(--accent);
+  color: #0f172a;
+  font-weight: 600;
+  cursor: pointer;
+}
+.send-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.thinking-indicator {
+  padding: 8px 12px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* ── Player Panel ── */
+#panel-player { padding: 16px; gap: 16px; overflow-y: auto; }
+
+.player-display { text-align: center; }
+.album-art { font-size: 80px; margin-bottom: 12px; }
+.player-track-title { font-size: 18px; font-weight: 700; }
+.player-track-artist { color: var(--text-dim); margin-top: 4px; }
+
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+#progress-bar { flex: 1; }
+
+.player-buttons { text-align: center; }
+
+.playlist-section h3 { margin-bottom: 10px; font-size: 14px; color: var(--text-dim); }
+.search-box { display: flex; gap: 6px; margin-bottom: 10px; }
+.search-box input { flex: 1; padding: 8px 12px; border: 1px solid var(--surface2); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.search-box button { padding: 8px 12px; border: none; border-radius: var(--radius); background: var(--surface2); cursor: pointer; }
+.search-results { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.search-result-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background .1s;
+}
+.search-result-item:hover { background: var(--surface2); }
+.sr-info { flex: 1; min-width: 0; }
+.sr-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-artist { font-size: 11px; color: var(--text-dim); }
+
+/* ── Profile Panel ── */
+#panel-profile { padding: 16px; gap: 12px; overflow-y: auto; }
+#panel-profile h3 { font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+.profile-editor {
+  width: 100%;
+  min-height: 100px;
+  padding: 10px;
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: monospace;
+  resize: vertical;
+  outline: none;
+}
+.profile-editor:focus { border-color: var(--accent); }
+
+/* ── Settings Panel ── */
+#panel-settings { padding: 16px; gap: 12px; overflow-y: auto; }
+#panel-settings h3 { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+.settings-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.settings-group label { display: flex; flex-direction: column; gap: 4px; }
+.settings-group label span { font-size: 12px; color: var(--text-dim); }
+.settings-group input {
+  padding: 8px 12px;
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.settings-group input:focus { border-color: var(--accent); }
+
+/* ── Save Button ── */
+.save-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent2);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.save-btn:disabled { opacity: .5; cursor: not-allowed; }
+.save-status { font-size: 12px; text-align: center; margin-top: 4px; color: var(--success); }
+
+/* ── PWA Install Button ── */
+.install-btn {
+  font-size: 14px;
+  background: var(--accent2);
+  transition: background 0.15s, transform 0.15s;
+}
+.install-btn:hover {
+  background: var(--accent);
+  transform: scale(1.1);
+}
+
+/* ── Offline Banner ── */
+.offline-banner {
+  background: var(--danger);
+  color: white;
+  text-align: center;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
