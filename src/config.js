@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 
 loadEnv();
 
-const REQUIRED_KEYS = ["ANTHROPIC_API_KEY", "FISH_AUDIO_API_KEY"];
+const REQUIRED_KEYS = ["ANTHROPIC_API_KEY"];
 
 const missing = REQUIRED_KEYS.filter((k) => !process.env[k]);
 if (missing.length > 0) {
@@ -14,9 +14,6 @@ if (missing.length > 0) {
 
 const claudioHome = join(homedir(), ".claudio");
 mkdirSync(claudioHome, { recursive: true });
-
-const ttsCacheDir = join(claudioHome, "tts-cache");
-mkdirSync(ttsCacheDir, { recursive: true });
 
 const config = Object.freeze({
   port: parseInt(process.env.PORT, 10) || 8080,
@@ -27,18 +24,26 @@ const config = Object.freeze({
 
   apiKeys: Object.freeze({
     anthropic: process.env.ANTHROPIC_API_KEY || null,
-    fishAudio: process.env.FISH_AUDIO_API_KEY || null,
+
     openWeather: process.env.OPENWEATHER_API_KEY || null,
     feishuAppId: process.env.FEISHU_APP_ID || null,
     feishuAppSecret: process.env.FEISHU_APP_SECRET || null,
     neteaseAppId: process.env.NETEASE_APP_ID || null,
     neteasePrivateKey: process.env.NETEASE_PRIVATE_KEY || null,
     neteaseCookie: process.env.NETEASE_COOKIE || null,
+    minimax: process.env.MINIMAX_API_KEY || null,
+  }),
+
+  tts: Object.freeze({
+    voiceId: process.env.MINIMAX_TTS_VOICE_ID || "female-shaonv",
+    speed: parseFloat(process.env.MINIMAX_TTS_SPEED) || 1.0,
+    vol: parseFloat(process.env.MINIMAX_TTS_VOL) || 1.0,
+    pitch: parseInt(process.env.MINIMAX_TTS_PITCH, 10) || 0,
   }),
 
   paths: Object.freeze({
     db: join(claudioHome, "state.db"),
-    ttsCache: ttsCacheDir,
+
     data: resolve("data"),
     prompts: resolve("prompts"),
     frontend: resolve("src/frontend"),

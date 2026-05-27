@@ -1,0 +1,5 @@
+.env
+.env.example
+.agents
+.claude
+node_modules

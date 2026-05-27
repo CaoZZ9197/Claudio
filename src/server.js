@@ -6,6 +6,7 @@ import routes from "./api/routes.js";
 import { setupWebSocket } from "./api/ws.js";
 import { initScheduler } from "./scheduler.js";
 import { initAuth } from "./music/netease-auth.js";
+import { initMiniMaxTTS, shutdownMiniMaxTTS } from "./minimax-tts.js";
 
 const app = express();
 
@@ -30,14 +31,6 @@ app.use("/themes", express.static(config.paths.frontend + "/themes", {
   },
 }));
 
-// Serve TTS cached audio files
-app.use("/audio/tts", express.static(config.paths.ttsCache, {
-  index: false,
-  setHeaders: (res, filePath) => {
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Cache-Control", "public, max-age=31536000");
-  },
-}));
 
 app.use("/api", routes);
 
@@ -66,6 +59,8 @@ function shutdown(signal) {
   wss.close();
   // 关闭数据库
   closeDb();
+  // 清理 MiniMax TTS 连接
+  shutdownMiniMaxTTS().catch(() => {});
 
   // 销毁所有活跃连接（HTTP keep-alive、SSE、WebSocket 等），立即释放端口
   for (const socket of connections) {
@@ -123,4 +118,10 @@ server.listen(config.port, () => {
     }
     console.log(`  WebSocket: ws://localhost:${config.port}/stream`);
     initScheduler();
+  });
+
+  // 后台初始化 MiniMax TTS 连接（不阻塞 HTTP 服务启动）
+  Promise.resolve(initMiniMaxTTS()).catch((err) => {
+    console.error("[minimax-tts] Init failed:", err.message);
+    console.warn("[minimax-tts] TTS will be unavailable until reconnection succeeds");
   });

@@ -14,7 +14,12 @@ const TASTE_FILES = {
 const DEFAULT_DJ_PERSONA = `你是 Claudio，一位私人 AI 电台 DJ。你温暖、有品位、懂音乐，像一个深夜电台主持人那样与听众交流。
 你必须始终以 JSON 格式回复：
 {"say": "DJ 播报词", "play": [{"query": "搜索词"}], "reason": "推荐理由", "segue": "过渡语"}
-用中文交流，根据用户的音乐品味、天气、时间和日程来推荐音乐。`;
+用中文交流，根据用户的音乐品味、天气、时间和日程来推荐音乐。
+
+## 重要行为规则
+- 当用户明确要求切换歌曲类型/风格/心情时，你应该简短确认切换（一句话），然后返回新类型的歌曲搜索词。系统会自动清空旧队列并切换播放。
+- 当用户只是聊天而非要求切换音乐时，正常回复，不要打断正在播放的歌曲。
+- 搜索词应该具体明确，适合网易云音乐搜索（如"轻松的爵士乐"而不是"轻松的音乐"）。`;
 
 // ── File readers ────────────────────────────────────────────────────────────────
 
@@ -191,4 +196,64 @@ export async function buildPrompt(userMessage, tasteLimit = 20) {
   return { prompt, context };
 }
 
-export default { buildContext, buildPrompt };
+// ── Radio continuation prompt ─────────────────────────────────────────────────
+
+/**
+ * 构建电台续播提示词。
+ * 当有活跃 session 时，基于场景上下文请求更多歌曲。
+ * 当无 session 时，基于用户品味档案默认推荐。
+ */
+export async function buildContinuePrompt(session) {
+  const { profiles } = loadTasteProfiles();
+  const env = getEnvironmentData();
+  const djPersona = loadPromptFile("dj-persona.md");
+
+  const sections = [];
+  sections.push(djPersona || DEFAULT_DJ_PERSONA);
+  sections.push("");
+
+  // 用户品味（续播也需要参考）
+  if (profiles.taste) {
+    sections.push("## 用户音乐品味");
+    sections.push(profiles.taste.trim());
+    sections.push("");
+  }
+
+  if (profiles.moodRules) {
+    sections.push("## 心情-音乐映射规则");
+    sections.push(profiles.moodRules.trim());
+    sections.push("");
+  }
+
+  // 当前环境
+  const now = new Date();
+  sections.push("## 当前环境");
+  sections.push(`当前时间: ${now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`);
+  if (env.weather && !env.weather.error) {
+    sections.push(`天气: ${env.weather.temperature}°C, ${env.weather.condition}, 城市: ${env.weather.city || "未知"}`);
+  }
+  sections.push("");
+
+  // 续播请求（核心）
+  sections.push("## 用户请求（系统自动续播）");
+
+  if (session) {
+    const playedList = (session.playedIds || []).join(", ");
+    sections.push(`继续为当前电台场景推荐歌曲。`);
+    sections.push(`当前模式：${session.description || session.scene || "未知"}`);
+    if (session.scene) sections.push(`场景：${session.scene}`);
+    if (session.mood) sections.push(`心情：${session.mood}`);
+    if (session.context) sections.push(`用户原始需求：${session.context}`);
+    if (playedList) {
+      sections.push(`已播放歌曲ID（请避免重复）：${playedList}`);
+    }
+    sections.push("请返回至少 5 首风格匹配但不同于已播放列表的歌曲。保持 session 字段与当前会话一致。");
+  } else {
+    sections.push("请根据用户的音乐品味推荐至少 5 首歌。结合当前时间和天气，像电台一样自然混搭。");
+    sections.push("这是默认电台模式，不需要设置 session 字段。");
+  }
+
+  return sections.join("\n");
+}
+
+export default { buildContext, buildPrompt, buildContinuePrompt };

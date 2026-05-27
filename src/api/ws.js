@@ -73,6 +73,18 @@ export function broadcastState(state) {
   broadcast({ type: "state", ...state });
 }
 
+export function broadcastTtsStart(text) {
+  broadcast({ type: "tts_start", text });
+}
+
+export function broadcastTtsEnd(success = true) {
+  broadcast({ type: "tts_end", success });
+}
+
+export function broadcastTtsError(error) {
+  broadcast({ type: "tts_error", error });
+}
+
 const CHUNK_SIZE = 32 * 1024; // 32KB chunks
 
 export async function streamAudioFile(filePath, track = null) {

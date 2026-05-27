@@ -41,7 +41,7 @@ export async function sendToClaude(systemPrompt, userMessage) {
 
   const response = await anthropic.messages.create({
     model: config.model,
-    max_tokens: 512,  // DJ JSON 响应通常不到 500 字符
+    max_tokens: 1536,  // DJ JSON 响应（含 session 字段时约 800-1200 字符）
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
     thinking: { type: "disabled" },
@@ -113,7 +113,7 @@ export function parseResponse(text) {
     return { action: "say", params: { text: text.trim() } };
   }
 
-  // 检测 DJ 复合响应格式 {say, play[], reason, segue}
+  // 检测 DJ 复合响应格式 {say, play[], reason, segue, session}
   if (action.say || action.play || action.reason || action.segue) {
     return {
       action: "dj_response",
@@ -122,6 +122,7 @@ export function parseResponse(text) {
         play: action.play || null,
         reason: action.reason || null,
         segue: action.segue || null,
+        session: action.session || null,
       },
     };
   }
@@ -152,7 +153,7 @@ export async function callClaudeStream(systemPrompt, userMessage, { onTextDelta 
   const anthropic = getClient();
   const stream = await anthropic.messages.stream({
     model: config.model,
-    max_tokens: 512,
+    max_tokens: 1536,
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
     thinking: { type: "disabled" },

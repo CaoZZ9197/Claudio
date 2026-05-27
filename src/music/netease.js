@@ -2,7 +2,7 @@ import { execNcm, escapeShellArg } from "./ncm-exec.js";
 import { getCachedCookie, getOrRefreshCookie } from "./netease-auth.js";
 import neteaseApi from "@neteasecloudmusicapienhanced/api";
 
-const { song_url, song_url_v1, cloudsearch } = neteaseApi;
+const { song_url, song_url_v1, cloudsearch, lyric } = neteaseApi;
 
 // ── URL 缓存（避免同一 trackId 重复解锁）──────────────────────────────────────
 const audioUrlCache = new Map();
@@ -11,7 +11,8 @@ const audioUrlCache = new Map();
 
 function isTrialOrVip(urlData) {
   const hasTrial = urlData.freeTrialInfo !== null && urlData.freeTrialInfo !== "null";
-  const isVip = [1, 4].includes(urlData.fee);
+  // fee: 0=免费, 1=VIP, 4=付费单曲, 8=VIP独占/云盘
+  const isVip = [1, 4, 8].includes(urlData.fee);
   return hasTrial || isVip;
 }
 
@@ -52,6 +53,7 @@ function normalizeSearchResults(raw) {
           ? s.artists.map((a) => (typeof a === "string" ? a : a.name)).join(", ")
           : s.artist ?? "Unknown",
       album: typeof s.al === "object" ? s.al?.name ?? "" : typeof s.album === "string" ? s.album : s.album?.name ?? "",
+      coverUrl: typeof s.al === "object" ? s.al?.picUrl ?? "" : s.picUrl ?? s.coverUrl ?? "",
       duration: (s.dt ?? s.duration) ? Math.floor((s.dt ?? s.duration) / 1000) : 0,
     }));
 }
@@ -80,10 +82,12 @@ function normalizePlaylistResult(raw) {
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
-export async function searchSongs(keyword, limit = 30) {
+export async function searchSongs(keyword, limit = 30, excludeIds = []) {
   if (!keyword || keyword.trim() === "") {
     return { status: "no_results", songs: [] };
   }
+
+  const excludeSet = new Set(excludeIds.map(String));
 
   try {
     const result = await cloudsearch({ keywords: keyword.trim(), type: 1, limit });
@@ -92,7 +96,12 @@ export async function searchSongs(keyword, limit = 30) {
       return { status: "error", error: `cloudsearch API error: code ${result.body?.code}` };
     }
 
-    const songs = normalizeSearchResults(result.body);
+    let songs = normalizeSearchResults(result.body);
+
+    // 过滤已播放歌曲
+    if (excludeSet.size > 0) {
+      songs = songs.filter((s) => !excludeSet.has(s.id));
+    }
 
     if (songs.length === 0) {
       return { status: "no_results", songs: [] };
@@ -135,10 +144,19 @@ export async function getLyrics(trackId) {
     return { status: "error", error: "track ID required" };
   }
 
-  // ncm-cli has no standalone lyrics command. The TUI mode displays lyrics
-  // internally but offers no CLI extraction. Return graceful degradation.
-  console.warn(`[netease] Lyrics not supported via ncm-cli (track: ${trackId})`);
-  return { status: "no_lyrics", lyrics: "" };
+  try {
+    const cookie = await getCookieForRequest();
+    const result = await lyric({ id: trackId, cookie });
+    if (result.status !== 200 || result.body.code !== 200) {
+      return { status: "no_lyrics", lyrics: "" };
+    }
+    const lrc = result.body.lrc?.lyric || "";
+    const tlrc = result.body.tlyric?.lyric || "";
+    return { status: "ok", lyrics: lrc, translatedLyrics: tlrc };
+  } catch (err) {
+    console.error(`[netease] Lyrics fetch failed for ${trackId}: ${err.message}`);
+    return { status: "error", error: err.message };
+  }
 }
 
 // ── Audio URL / Playback ──────────────────────────────────────────────────────
@@ -246,6 +264,24 @@ export async function getAudioUrl(trackId) {
 }
 
 /**
+ * 后台预解锁：并行执行 mpv 播放（触发 ncm-cli 解锁）和获取浏览器音频 URL。
+ * 不阻塞调用者，用于在 TTS 播报期间后台预热歌曲。
+ */
+export function unlockSong(song) {
+  if (!song?.encryptedId || !song?.originalId) {
+    return Promise.resolve();
+  }
+
+  const mpvCmd = `play --song --encrypted-id ${escapeShellArg(song.encryptedId)} --original-id ${escapeShellArg(song.originalId)}`;
+
+  // 并行执行：mpv 触发解锁 + 获取浏览器音频 URL（可能触发 unblock）
+  return Promise.all([
+    execNcm(mpvCmd).catch(() => {}),
+    getAudioUrl(song.originalId),
+  ]);
+}
+
+/**
  * Play a song both server-side (ncm-cli mpv) and provide browser audio URL.
  * Accepts a song object from searchSongs result.
  */
@@ -265,6 +301,12 @@ export async function playSong(song) {
   const urlResult = await getAudioUrl(song.originalId);
 
   if (urlResult.status === "ok") {
+    return { status: "ok", url: `/api/audio/${song.originalId}` };
+  }
+
+  // VIP 歌曲虽然有完整播放限制，但试听 URL 仍可播放（通常 30 秒）
+  if (urlResult.status === "vip_only" && urlResult.url) {
+    console.warn(`[netease] 歌曲 ${song.originalId} 为 VIP 歌曲，提供试听 URL`);
     return { status: "ok", url: `/api/audio/${song.originalId}` };
   }
 
@@ -306,4 +348,4 @@ export async function getPlaybackState() {
   }
 }
 
-export default { searchSongs, getPlaylist, getLyrics, getAudioUrl, playSong, controlPlayback, getPlaybackState };
+export default { searchSongs, getPlaylist, getLyrics, getAudioUrl, playSong, controlPlayback, getPlaybackState, unlockSong };

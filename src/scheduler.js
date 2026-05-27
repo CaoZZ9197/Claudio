@@ -1,8 +1,8 @@
 import cron from "node-cron";
 import { buildContext } from "./context.js";
 import { callClaude } from "./claudio.js";
-import { synthesizeText, getAudioUrlPath, getCacheFilePath } from "./tts.js";
-import { streamAudioFile } from "./api/ws.js";
+import { getMiniMaxTTS } from "./minimax-tts.js";
+import { broadcastAudio, broadcast } from "./api/ws.js";
 import { getPreference } from "./db.js";
 import { getCurrentWeather } from "./external/weather.js";
 import { getTodayEvents } from "./external/calendar.js";
@@ -113,13 +113,15 @@ async function morningBroadcastHandler() {
       greeting += "今天没有日程安排。";
     }
 
-    const { hash } = await synthesizeText(greeting);
-    const filePath = getAudioUrlPath(hash);
-    console.log(`[scheduler] Morning broadcast ready: ${filePath}`);
+    console.log(`[scheduler] Morning broadcast: "${greeting.slice(0, 50)}..."`);
 
-    // Stream the TTS audio
-    const fullPath = getCacheFilePath(hash);
-    await streamAudioFile(fullPath, { title: "Morning Broadcast", artist: "Claudio" });
+    // 使用 MiniMax TTS 直接流式推送语音
+    broadcast({ type: "tts_start", text: greeting });
+    const mmTTS = getMiniMaxTTS();
+    await mmTTS.synthesize(greeting.trim(), (chunk) => {
+      broadcastAudio(chunk);
+    });
+    broadcast({ type: "tts_end" });
   } catch (err) {
     console.error("[scheduler] Morning broadcast failed:", err.message);
   }
@@ -129,9 +131,12 @@ async function moodCheckHandler() {
   console.log("[scheduler] Running mood check...");
   try {
     const text = "嗨，你今天心情怎么样？想听点什么音乐吗？";
-    const { hash } = await synthesizeText(text);
-    const fullPath = getCacheFilePath(hash);
-    await streamAudioFile(fullPath, { title: "Mood Check", artist: "Claudio" });
+    broadcast({ type: "tts_start", text });
+    const mmTTS = getMiniMaxTTS();
+    await mmTTS.synthesize(text.trim(), (chunk) => {
+      broadcastAudio(chunk);
+    });
+    broadcast({ type: "tts_end" });
   } catch (err) {
     console.error("[scheduler] Mood check failed:", err.message);
   }

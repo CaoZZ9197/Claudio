@@ -5,155 +5,199 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Claudio AI Radio</title>
   <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="theme-color" content="#0a0a1a" />
   <meta name="description" content="Personal AI radio with Claude DJ" />
   <link id="theme-stylesheet" rel="stylesheet" href="/themes/dark.css" />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>" />
-  <!-- iOS PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Claudio" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
 </head>
 <body>
-  <!-- Offline banner -->
-  <div id="offline-banner" class="offline-banner" hidden>离线模式 — 部分功能不可用</div>
+  <div id="offline-banner" class="offline-banner" hidden>OFFLINE — 离线模式</div>
 
   <div id="app">
-    <!-- Player Bar -->
-    <header class="player-bar">
-      <div class="now-playing">
-        <div class="track-info">
-          <div class="track-title" id="track-title">Claudio AI Radio</div>
-          <div class="track-artist" id="track-artist">等待播放...</div>
+    <!-- ═══ LEFT: Player Panel ═══ -->
+    <aside class="player-panel" id="panel-player">
+      <!-- Track Info -->
+      <div class="player-display">
+        <div class="album-art" id="album-art"></div>
+        <div class="player-track-title neon-text-green" id="player-track-title">等待播放</div>
+        <div class="player-track-artist" id="player-track-artist">-</div>
+        <div class="session-label" id="session-label" hidden></div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="progress-container">
+        <span id="current-time" class="time-mono">0:00</span>
+        <input type="range" id="progress-bar" min="0" max="100" value="0" />
+        <span id="total-time" class="time-mono">0:00</span>
+      </div>
+
+      <!-- Status Bar (decorative) -->
+      <div class="status-bar">
+        <span><span class="status-dot live"></span>SYS.OK</span>
+        <span><span class="status-dot"></span>BIT:320</span>
+        <span><span class="status-dot"></span>SIG:99%</span>
+      </div>
+
+      <!-- Spectrum Visualizer -->
+      <canvas id="spectrum-canvas" class="spectrum-canvas"></canvas>
+
+      <!-- Lyrics -->
+      <div class="lyrics-container" id="lyrics-container">
+        <div class="lyrics-inner" id="lyrics-inner">
+          <p class="lyric-line">等待播放...</p>
         </div>
       </div>
-      <div class="player-controls">
-        <button class="ctrl-btn" id="btn-prev" title="上一首">⏮</button>
-        <button class="ctrl-btn play-btn" id="btn-play" title="播放">▶</button>
-        <button class="ctrl-btn" id="btn-next" title="下一首">⏭</button>
-        <button class="ctrl-btn" id="btn-volume" title="音量">🔊</button>
+
+      <!-- Up Next Queue -->
+      <div class="queue-section" id="queue-section" hidden>
+        <div class="queue-header">UP NEXT</div>
+        <div class="queue-list" id="queue-list"></div>
       </div>
-      <div class="volume-slider-container">
+
+      <!-- Player Controls -->
+      <div class="player-controls-row">
+        <button class="ctrl-btn pixel-btn" id="btn-prev" title="上一首">◄◄</button>
+        <button class="ctrl-btn pixel-btn play-btn-lg" id="btn-play" title="播放">►</button>
+        <button class="ctrl-btn pixel-btn" id="btn-next" title="下一首">►►</button>
+      </div>
+
+      <!-- Volume -->
+      <div class="volume-row">
+        <button class="ctrl-btn pixel-btn" id="btn-volume" title="静音">♪</button>
         <input type="range" id="volume-slider" min="0" max="100" value="80" />
+        <span class="vol-value" id="volume-value">80</span>
       </div>
-      <button class="ctrl-btn install-btn" id="btn-install" title="安装应用" hidden>📲</button>
-    </header>
 
-    <!-- Main Content Tabs -->
-    <nav class="tab-bar">
-      <button class="tab-btn active" data-tab="chat">对话</button>
-      <button class="tab-btn" data-tab="player">播放器</button>
-      <button class="tab-btn" data-tab="profile">口味</button>
-      <button class="tab-btn" data-tab="settings">设置</button>
-    </nav>
+      <!-- Playlist Search -->
+      <div class="playlist-section">
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="> 搜索歌曲..." autocomplete="off" />
+          <button id="btn-search" class="pixel-btn-sm">搜索</button>
+        </div>
+        <div class="search-results" id="search-results"></div>
+      </div>
 
-    <!-- Tab Panels -->
-    <main class="content">
-      <!-- Chat Panel -->
-      <section class="tab-panel active" id="panel-chat">
-        <div class="chat-messages" id="chat-messages">
+      <!-- Bottom Buttons -->
+      <div class="player-footer">
+        <button class="ctrl-btn pixel-btn" id="btn-player-play" title="播放">►</button>
+        <button class="ctrl-btn pixel-btn" id="btn-install" title="安装应用" hidden>+</button>
+        <button class="ctrl-btn pixel-btn" id="btn-open-settings" title="设置">⚙</button>
+      </div>
+    </aside>
+
+    <!-- ═══ RIGHT: Chat Panel ═══ -->
+    <main class="chat-panel" id="panel-chat">
+      <!-- Weather Bar -->
+      <div class="weather-bar" id="weather-bar">
+        <span class="weather-icon" id="weather-icon">--</span>
+        <span class="weather-info" id="weather-info">天气数据加载中...</span>
+      </div>
+
+      <!-- Chat Messages -->
+      <div class="chat-messages" id="chat-messages">
+      <div class="message-row assistant">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" class="avatar avatar-assistant">
+            <rect x="7" y="0" width="2" height="1"/>
+            <rect x="4" y="1" width="8" height="1"/>
+            <rect x="2" y="2" width="2" height="4"/>
+            <rect x="12" y="2" width="2" height="4"/>
+            <rect x="5" y="2" width="6" height="1"/>
+            <rect x="5" y="3" width="6" height="1"/>
+            <rect x="6" y="3" width="2" height="2"/>
+            <rect x="9" y="3" width="2" height="2"/>
+            <rect x="5" y="5" width="6" height="1"/>
+            <rect x="5" y="6" width="6" height="1"/>
+            <rect x="7" y="6" width="2" height="1"/>
+            <rect x="6" y="7" width="4" height="1"/>
+          </svg>
           <div class="message assistant">
             <div class="message-content">你好！我是Claudio，你的AI音乐DJ。有什么想听的或者想聊的吗？</div>
           </div>
         </div>
-        <form class="chat-input-area" id="chat-form">
-          <input type="text" id="chat-input" placeholder="说点什么..." autocomplete="off" />
-          <button type="submit" class="send-btn">发送</button>
-        </form>
-        <div class="thinking-indicator" id="thinking-indicator" hidden>
-          <span>Claudio正在思考...</span>
-        </div>
-      </section>
+      </div>
 
-      <!-- Player Panel -->
-      <section class="tab-panel" id="panel-player">
-        <div class="player-display">
-          <div class="album-art" id="album-art">🎵</div>
-          <div class="player-track-title" id="player-track-title">等待播放</div>
-          <div class="player-track-artist" id="player-track-artist">-</div>
-        </div>
-        <div class="progress-container">
-          <span id="current-time">0:00</span>
-          <input type="range" id="progress-bar" min="0" max="100" value="0" />
-          <span id="total-time">0:00</span>
-        </div>
-        <div class="player-buttons">
-          <button class="ctrl-btn lg" id="btn-player-play">▶</button>
-        </div>
-        <div class="playlist-section">
-          <h3>播放列表</h3>
-          <div class="search-box">
-            <input type="text" id="search-input" placeholder="搜索歌曲..." />
-            <button id="btn-search">🔍</button>
-          </div>
-          <div class="search-results" id="search-results"></div>
-        </div>
-      </section>
+      <!-- Thinking Indicator -->
+      <div class="thinking-indicator" id="thinking-indicator" hidden>
+        <span class="thinking-text">Claudio正在思考</span>
+        <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
+      </div>
 
-      <!-- Profile Panel -->
-      <section class="tab-panel" id="panel-profile">
-        <h3>音乐口味</h3>
+      <!-- Chat Input -->
+      <form class="chat-input-area" id="chat-form">
+        <span class="input-prompt">&gt;</span>
+        <input type="text" id="chat-input" placeholder="说点什么..." autocomplete="off" />
+        <button type="submit" class="send-btn pixel-btn-sm">发送</button>
+      </form>
+    </main>
+  </div>
+
+  <!-- ═══ Settings Modal ═══ -->
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <span class="modal-title">系统设置</span>
+        <button class="ctrl-btn pixel-btn" id="btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Profile Section -->
+        <h3 class="modal-section-title">音乐口味</h3>
         <textarea id="taste-editor" class="profile-editor" placeholder="描述你的音乐口味..."></textarea>
 
-        <h3>心情规则</h3>
+        <h3 class="modal-section-title">心情规则</h3>
         <textarea id="mood-rules-editor" class="profile-editor" placeholder="根据心情推荐音乐的规则..."></textarea>
 
-        <h3>播放列表</h3>
+        <h3 class="modal-section-title">播放列表</h3>
         <textarea id="playlists-editor" class="profile-editor" placeholder='{"default": ["playlist_id"]}'></textarea>
 
-        <button class="save-btn" id="btn-save-profile">保存口味设置</button>
+        <button class="save-btn pixel-btn-sm" id="btn-save-profile">保存口味设置</button>
         <div class="save-status" id="profile-save-status"></div>
-      </section>
 
-      <!-- Settings Panel -->
-      <section class="tab-panel" id="panel-settings">
-        <h3>API 设置</h3>
+        <hr class="modal-divider" />
+
+        <!-- Settings Section -->
+        <h3 class="modal-section-title">API 设置</h3>
         <div class="settings-group">
-          <label>
-            <span>Claude API Key</span>
+          <label><span>Claude API Key</span>
             <input type="password" id="setting-anthropic-key" placeholder="sk-ant-..." />
           </label>
-          <label>
-            <span>Fish Audio API Key</span>
-            <input type="password" id="setting-fishaudio-key" placeholder="API Key" />
-          </label>
-          <label>
-            <span>网易云音乐 AppID</span>
+
+          <label><span>网易云音乐 AppID</span>
             <input type="password" id="setting-netease-appid" placeholder="AppID" />
           </label>
-          <label>
-            <span>网易云音乐 PrivateKey</span>
+          <label><span>网易云音乐 PrivateKey</span>
             <input type="password" id="setting-netease-privatekey" placeholder="PrivateKey" />
           </label>
         </div>
 
-        <h3>时间设置</h3>
+        <h3 class="modal-section-title">时间设置</h3>
         <div class="settings-group">
-          <label>
-            <span>早晨规划时间</span>
+          <label><span>早晨规划时间</span>
             <input type="time" id="setting-morning-planning" value="07:00" />
           </label>
-          <label>
-            <span>早晨播报时间</span>
+          <label><span>早晨播报时间</span>
             <input type="time" id="setting-morning-broadcast" value="09:00" />
           </label>
-          <label>
-            <span>心情检查间隔（小时）</span>
+          <label><span>心情检查间隔（小时）</span>
             <input type="number" id="setting-mood-check" value="3" min="1" max="12" />
           </label>
         </div>
 
-        <button class="save-btn" id="btn-save-settings">保存设置</button>
+        <button class="save-btn pixel-btn-sm" id="btn-save-settings">保存设置</button>
         <div class="save-status" id="settings-save-status"></div>
-      </section>
-    </main>
+      </div>
+    </div>
   </div>
 
-  <!-- Audio element for TTS and music playback -->
   <audio id="audio-player" hidden></audio>
-
+  <audio id="tts-player" hidden></audio>
   <script src="/app.js" type="module"></script>
 </body>
 </html>

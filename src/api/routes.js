@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { routeMessage, routeMessageStream, dispatchAction } from "../router.js";
-import { searchSongs, getPlaylist, controlPlayback, getAudioUrl } from "../music/netease.js";
+import { routeMessage, routeMessageStream, dispatchAction, handleContinueRadio } from "../router.js";
+import { searchSongs, getPlaylist, controlPlayback, getAudioUrl, getLyrics } from "../music/netease.js";
 import { getRecentPlays, getRecentMessages, getAllPreferences, setPreference } from "../db.js";
 import { broadcastState } from "./ws.js";
 import { discoverDevices, castAudio } from "../external/upnp.js";
+import { getCurrentWeather } from "../external/weather.js";
 
 const router = Router();
 
@@ -128,12 +129,27 @@ router.post("/chat", async (req, res) => {
         || null,
       actionResult: result.actionResult || null,
       actionResults: actionResults.length > 0 ? actionResults : undefined,
+      queue: result.queue || [],
+      replaceQueue: result.replaceQueue || false,
+      session: result.session || null,
     };
 
     res.json(response);
   } catch (err) {
     console.error(`[api/chat] Error: ${err.message}`);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/radio/continue ────────────────────────────────────────────────────
+
+router.post("/radio/continue", async (_req, res) => {
+  try {
+    const result = await handleContinueRadio();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(`[api/radio/continue] Error: ${err.message}`);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -215,16 +231,27 @@ router.get("/audio/:trackId", async (req, res) => {
 
   try {
     const urlResult = await getAudioUrl(trackId);
-    if (urlResult.status !== "ok" || !urlResult.url) {
+    if (!urlResult.url || (urlResult.status !== "ok" && urlResult.status !== "vip_only")) {
       return res.status(404).json({ error: urlResult.error || "audio not available" });
     }
 
-    const audioRes = await fetch(urlResult.url);
+    console.log(`[api/audio] 开始代理: trackId=${trackId}, url=${urlResult.url.substring(0, 80)}...`);
+
+    const audioRes = await fetch(urlResult.url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "*/*",
+        "Referer": "https://music.163.com/",
+      },
+    });
+    console.log(`[api/audio] 上游响应: status=${audioRes.status}, content-type=${audioRes.headers.get("content-type")}, length=${audioRes.headers.get("content-length") || "unknown"}`);
+
     if (!audioRes.ok) {
       return res.status(502).json({ error: `upstream audio fetch failed: ${audioRes.status}` });
     }
 
-    res.setHeader("Content-Type", "audio/mpeg");
+    const upstreamType = audioRes.headers.get("content-type") || "audio/mpeg";
+    res.setHeader("Content-Type", upstreamType);
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Accept-Ranges", "bytes");
 
@@ -275,6 +302,35 @@ router.post("/settings", (req, res) => {
     setPreference(key, String(value));
   }
   res.json({ ok: true });
+});
+
+// ── GET /api/weather ────────────────────────────────────────────────────────────
+
+router.get("/weather", async (_req, res) => {
+  try {
+    const weather = await getCurrentWeather();
+    if (weather.error) {
+      return res.json({ ok: false, error: weather.error });
+    }
+    res.json({ ok: true, ...weather });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── GET /api/lyrics/:trackId ─────────────────────────────────────────────────────
+
+router.get("/lyrics/:trackId", async (req, res) => {
+  const { trackId } = req.params;
+  if (!trackId) {
+    return res.status(400).json({ ok: false, error: "trackId required" });
+  }
+  try {
+    const result = await getLyrics(trackId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // ── UPnP Casting ─────────────────────────────────────────────────────────────
