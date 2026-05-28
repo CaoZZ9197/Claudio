@@ -134,6 +134,7 @@ function handleTtsEnd() {
   isTtsActive = false;
 
   if (ttsPendingChunks.length > 0) {
+    lastTtsText = "";
     // 所有 chunk 已收齐，合并为单个 Blob 一次性播放
     const blob = new Blob(ttsPendingChunks, { type: "audio/mpeg" });
     releaseTtsBlobUrl();
