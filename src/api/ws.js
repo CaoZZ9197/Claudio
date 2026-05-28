@@ -11,14 +11,18 @@ export function setupWebSocket(server) {
     console.error("[ws] Server error:", err.message);
   });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
     clients.add(ws);
+    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    const origin = req.headers["origin"] || "-";
+    console.log(`[ws] Client connected from ${ip} origin=${origin} (total: ${clients.size})`);
 
     // Send current state to newly connected client
     sendToClient(ws, currentStreamState);
 
     ws.on("close", () => {
       clients.delete(ws);
+      console.log(`[ws] Client disconnected (total: ${clients.size})`);
     });
 
     ws.on("error", (err) => {
@@ -74,10 +78,12 @@ export function broadcastState(state) {
 }
 
 export function broadcastTtsStart(text) {
+  console.log(`[ws] broadcastTtsStart to ${clients.size} client(s), text: "${text.slice(0, 40)}..."`);
   broadcast({ type: "tts_start", text });
 }
 
 export function broadcastTtsEnd(success = true) {
+  console.log(`[ws] broadcastTtsEnd to ${clients.size} client(s)`);
   broadcast({ type: "tts_end", success });
 }
 

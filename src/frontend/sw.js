@@ -1,4 +1,4 @@
-const CACHE_NAME = "claudio-v4";
+const CACHE_NAME = "claudio-v5";
 const APP_SHELL = [
   "/",
   "/index.html",

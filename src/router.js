@@ -482,6 +482,8 @@ async function streamTtsSay(text) {
     return;
   }
 
+  console.log(`[router] streamTtsSay called, text: "${text.slice(0, 40)}..."`);
+
   broadcastTtsStart(text);
 
   const mmTTS = getMiniMaxTTS();

@@ -49,11 +49,17 @@ const AVATAR_USER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
 function connectWS() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
 
+  // 显式关闭旧连接，防止僵尸 WebSocket 导致音频 chunk 重复
+  if (ws) {
+    try { ws.close(); } catch (_) {}
+    ws = null;
+  }
+
   ws = new WebSocket(WS_URL);
 
   ws.addEventListener("open", () => {
     isConnected = true;
-    console.log("[ws] Connected");
+    console.log("[ws] Connected, readyState:", ws.readyState, "total clients will be counted server-side");
   });
 
   ws.addEventListener("message", (event) => {
@@ -89,10 +95,17 @@ function connectWS() {
     setTimeout(connectWS, 3000);
   });
 
-  ws.addEventListener("error", () => {
-    ws.close();
+  ws.addEventListener("error", (e) => {
+    e.target.close();
   });
 }
+
+// 页面卸载时主动关闭 WebSocket，防止僵尸连接
+window.addEventListener("beforeunload", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.close();
+  }
+});
 
 function handlePlayerState(state) {
   const { state: playerState, track, shouldStopCurrent } = state;
@@ -123,6 +136,11 @@ function handleTtsStart({ text }) {
   isTtsActive = true;
   ttsPendingChunks = [];
   lastTtsText = text || "";
+  // 先停止当前播放的 TTS 音频，再释放 Blob URL
+  if (!ttsAudioEl.paused) {
+    ttsAudioEl.pause();
+    ttsAudioEl.removeAttribute("src");
+  }
   releaseTtsBlobUrl();
 
   // 压低音乐音量（ducking），不暂停
@@ -130,13 +148,21 @@ function handleTtsStart({ text }) {
 }
 
 function handleTtsEnd() {
+  // 防重入：若非活跃 TTS 会话，忽略重复的 tts_end 事件
+  if (!isTtsActive) {
+    console.log("[tts] handleTtsEnd called but TTS not active, ignoring");
+    return;
+  }
   console.log("[tts] MiniMax TTS ended, starting playback");
   isTtsActive = false;
 
   if (ttsPendingChunks.length > 0) {
     lastTtsText = "";
     // 所有 chunk 已收齐，合并为单个 Blob 一次性播放
+    const totalSize = ttsPendingChunks.reduce((sum, c) => sum + c.size, 0);
+    console.log("[tts] Creating blob from", ttsPendingChunks.length, "chunks, total size:", totalSize, "bytes");
     const blob = new Blob(ttsPendingChunks, { type: "audio/mpeg" });
+    console.log("[tts] Blob created, size:", blob.size, "bytes");
     releaseTtsBlobUrl();
     ttsBlobUrl = URL.createObjectURL(blob);
     ttsAudioEl.src = ttsBlobUrl;
@@ -146,6 +172,8 @@ function handleTtsEnd() {
       setTimeout(() => {
         ttsAudioEl.play().catch((e) => console.warn("[tts] Retry failed:", e.message));
       }, 500);
+    }).then(() => {
+      console.log("[tts] Audio started playing, duration:", ttsAudioEl.duration, "s");
     });
   } else if (lastTtsText) {
     console.warn("[tts] No audio chunks received, using browser TTS fallback");
@@ -204,6 +232,7 @@ function processMusicAction(data) {
 
 function handleTtsAudioChunk(blob) {
   ttsPendingChunks.push(blob);
+  console.log("[tts] Chunk received:", blob.size, "bytes, total chunks:", ttsPendingChunks.length);
 }
 
 function releaseTtsBlobUrl() {
@@ -229,7 +258,7 @@ function finishTts() {
 
 // TTS 一次性播放完毕后，恢复音量并播放音乐
 ttsAudioEl.addEventListener("ended", () => {
-  console.log("[tts] TTS audio playback finished");
+  console.log("[tts] TTS audio playback finished, duration:", ttsAudioEl.duration, "s, currentTime:", ttsAudioEl.currentTime);
   finishTts();
 });
 
