@@ -35,10 +35,16 @@ const config = Object.freeze({
   }),
 
   tts: Object.freeze({
+    provider: process.env.TTS_PROVIDER || "minimax",  // "minimax" | "edge-tts"
+    // MiniMax TTS 配置（provider=minimax 时生效）
     voiceId: process.env.MINIMAX_TTS_VOICE_ID || "female-shaonv",
     speed: parseFloat(process.env.MINIMAX_TTS_SPEED) || 1.0,
     vol: parseFloat(process.env.MINIMAX_TTS_VOL) || 1.0,
     pitch: parseInt(process.env.MINIMAX_TTS_PITCH, 10) || 0,
+    // Edge-TTS 配置（provider=edge-tts 时生效）
+    edgeVoice: process.env.EDGE_TTS_VOICE || "zh-CN-XiaoxiaoNeural",
+    edgeRate: process.env.EDGE_TTS_RATE || "+0%",
+    edgePitch: process.env.EDGE_TTS_PITCH || "+0Hz",
   }),
 
   paths: Object.freeze({

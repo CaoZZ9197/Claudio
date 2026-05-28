@@ -6,7 +6,7 @@ import routes from "./api/routes.js";
 import { setupWebSocket } from "./api/ws.js";
 import { initScheduler } from "./scheduler.js";
 import { initAuth } from "./music/netease-auth.js";
-import { initMiniMaxTTS, shutdownMiniMaxTTS } from "./minimax-tts.js";
+import { initTTS, shutdownTTS } from "./tts-adapter.js";
 
 const app = express();
 
@@ -59,8 +59,8 @@ function shutdown(signal) {
   wss.close();
   // 关闭数据库
   closeDb();
-  // 清理 MiniMax TTS 连接
-  shutdownMiniMaxTTS().catch(() => {});
+  // 清理 TTS 引擎
+  shutdownTTS().catch(() => {});
 
   // 销毁所有活跃连接（HTTP keep-alive、SSE、WebSocket 等），立即释放端口
   for (const socket of connections) {
@@ -120,8 +120,8 @@ server.listen(config.port, () => {
     initScheduler();
   });
 
-  // 后台初始化 MiniMax TTS 连接（不阻塞 HTTP 服务启动）
-  Promise.resolve(initMiniMaxTTS()).catch((err) => {
-    console.error("[minimax-tts] Init failed:", err.message);
-    console.warn("[minimax-tts] TTS will be unavailable until reconnection succeeds");
+  // 后台初始化 TTS 引擎（不阻塞 HTTP 服务启动）
+  Promise.resolve(initTTS()).catch((err) => {
+    console.error("[tts] Init failed:", err.message);
+    console.warn("[tts] TTS will be unavailable until reconnection succeeds");
   });

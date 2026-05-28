@@ -123,6 +123,7 @@ export function parseResponse(text) {
         reason: action.reason || null,
         segue: action.segue || null,
         session: action.session || null,
+        emotion: action.emotion || null,
       },
     };
   }

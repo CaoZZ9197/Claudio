@@ -3,7 +3,7 @@ import { buildPrompt, buildContinuePrompt } from "./context.js";
 import { searchSongs, playSong, controlPlayback, unlockSong } from "./music/netease.js";
 
 import { broadcastState, broadcast, broadcastAudio, broadcastTtsStart, broadcastTtsEnd, broadcastTtsError } from "./api/ws.js";
-import { getMiniMaxTTS } from "./minimax-tts.js";
+import { getTTS } from "./tts-adapter.js";
 import { getSession, setSession, clearSession, addPlayedSong, getPlayedIds, clearQueue } from "./radio-session.js";
 import { saveMessage } from "./db.js";
 import { getCurrentWeather } from "./external/weather.js";
@@ -475,26 +475,26 @@ function shouldSpeakTts(text) {
  * 通过 MiniMax WebSocket 合成语音并流式推送到前端
  * 发送 tts_start / tts_end / tts_error 信令协调音乐暂停恢复
  */
-async function streamTtsSay(text) {
+async function streamTtsSay(text, emotion) {
   if (!text || text.trim() === "") return;
 
   if (!shouldSpeakTts(text)) {
     return;
   }
 
-  console.log(`[router] streamTtsSay called, text: "${text.slice(0, 40)}..."`);
+  console.log(`[router] streamTtsSay called, text: "${text.slice(0, 40)}...", emotion: ${emotion || "none"}`);
 
   broadcastTtsStart(text);
 
-  const mmTTS = getMiniMaxTTS();
+  const ttsEngine = getTTS();
 
   try {
-    await mmTTS.synthesize(text.trim(), (chunk) => {
+    await ttsEngine.synthesize(text.trim(), (chunk) => {
       broadcastAudio(chunk);
-    });
+    }, emotion);
     broadcastTtsEnd(true);
   } catch (err) {
-    console.error(`[router] MiniMax TTS failed: ${err.message}`);
+    console.error(`[router] TTS failed: ${err.message}`);
     broadcastTtsError(err.message);
     throw err;
   }
@@ -730,7 +730,7 @@ export async function routeMessageStream(message, emitter) {
 
   // 并行：TTS 合成 + 歌曲检索/解锁
   const ttsPromise = sayText
-    ? streamTtsSay(sayText).catch(() => {})
+    ? streamTtsSay(sayText, response.params?.emotion).catch(() => {})
     : Promise.resolve();
 
   const isMusicAction = response.action === "play_music" || response.action === "dj_response";

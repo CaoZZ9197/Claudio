@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { buildContext } from "./context.js";
 import { callClaude } from "./claudio.js";
-import { getMiniMaxTTS } from "./minimax-tts.js";
+import { getTTS } from "./tts-adapter.js";
 import { broadcastAudio, broadcast } from "./api/ws.js";
 import { getPreference } from "./db.js";
 import { getCurrentWeather } from "./external/weather.js";
@@ -115,12 +115,12 @@ async function morningBroadcastHandler() {
 
     console.log(`[scheduler] Morning broadcast: "${greeting.slice(0, 50)}..."`);
 
-    // 使用 MiniMax TTS 直接流式推送语音
+    // 使用 TTS 引擎直接流式推送语音
     broadcast({ type: "tts_start", text: greeting });
-    const mmTTS = getMiniMaxTTS();
-    await mmTTS.synthesize(greeting.trim(), (chunk) => {
+    const ttsEngine = getTTS();
+    await ttsEngine.synthesize(greeting.trim(), (chunk) => {
       broadcastAudio(chunk);
-    });
+    }, "cheerful");
     broadcast({ type: "tts_end" });
   } catch (err) {
     console.error("[scheduler] Morning broadcast failed:", err.message);
@@ -132,10 +132,10 @@ async function moodCheckHandler() {
   try {
     const text = "嗨，你今天心情怎么样？想听点什么音乐吗？";
     broadcast({ type: "tts_start", text });
-    const mmTTS = getMiniMaxTTS();
-    await mmTTS.synthesize(text.trim(), (chunk) => {
+    const ttsEngine = getTTS();
+    await ttsEngine.synthesize(text.trim(), (chunk) => {
       broadcastAudio(chunk);
-    });
+    }, "gentle");
     broadcast({ type: "tts_end" });
   } catch (err) {
     console.error("[scheduler] Mood check failed:", err.message);
