@@ -27,6 +27,15 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS liked_songs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    artist TEXT NOT NULL DEFAULT '',
+    album TEXT NOT NULL DEFAULT '',
+    source_id TEXT NOT NULL UNIQUE,
+    liked_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ── Messages ────────────────────────────────────────────────────────────────
@@ -63,6 +72,46 @@ export function savePlay({ title, artist = "", album = "", sourceId = "" }) {
 
 export function getRecentPlays(limit = 50) {
   return getPlays.all({ limit });
+}
+
+// ── Liked Songs ─────────────────────────────────────────────────────────────
+
+const insertLikedSong = db.prepare(
+  "INSERT OR IGNORE INTO liked_songs (title, artist, album, source_id) VALUES (@title, @artist, @album, @source_id)"
+);
+
+const deleteLikedSong = db.prepare(
+  "DELETE FROM liked_songs WHERE source_id = @source_id"
+);
+
+const getLikedSongBySourceId = db.prepare(
+  "SELECT * FROM liked_songs WHERE source_id = @source_id"
+);
+
+const getAllLikedSongs = db.prepare(
+  "SELECT id, title, artist, album, source_id, liked_at FROM liked_songs ORDER BY liked_at DESC LIMIT @limit OFFSET @offset"
+);
+
+const countLikedSongs = db.prepare("SELECT COUNT(*) AS count FROM liked_songs");
+
+export function addLikedSong({ title, artist = "", album = "", sourceId }) {
+  return insertLikedSong.run({ title, artist, album, source_id: sourceId });
+}
+
+export function removeLikedSong(sourceId) {
+  return deleteLikedSong.run({ source_id: sourceId });
+}
+
+export function isLiked(sourceId) {
+  return !!getLikedSongBySourceId.get({ source_id: sourceId });
+}
+
+export function getLikedSongs(limit = 100, offset = 0) {
+  return getAllLikedSongs.all({ limit, offset });
+}
+
+export function getLikedSongsCount() {
+  return countLikedSongs.get().count;
 }
 
 // ── Preferences ─────────────────────────────────────────────────────────────
