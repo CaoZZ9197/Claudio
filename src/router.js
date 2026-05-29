@@ -495,9 +495,11 @@ async function streamTtsSay(text, emotion) {
   const ttsEngine = getTTS();
 
   try {
+    const t0 = Date.now();
     await ttsEngine.synthesize(text.trim(), (chunk) => {
       broadcastAudio(chunk);
     }, emotion);
+    console.log(`[router] [timing] TTS synthesize: ${Date.now() - t0}ms`);
     broadcastTtsEnd(true);
   } catch (err) {
     console.error(`[router] TTS failed: ${err.message}`);
@@ -537,9 +539,12 @@ async function prepareMusicStreamData(response) {
       .map((item) => (typeof item === "string" ? item : item.query || item.keyword || ""))
       .filter(Boolean);
 
+    const t0 = Date.now();
     const results = await Promise.all(
       queries.map(async (query, index) => {
+        const tSearch = Date.now();
         const searchResult = await searchSongs(query, 30);
+        console.log(`[router] [timing] searchSongs[${index}] "${query}": ${Date.now() - tSearch}ms, songs: ${searchResult.songs?.length || 0}`);
         if (searchResult.status !== "ok" || searchResult.songs.length === 0) {
           return { error: "no_results", query };
         }
@@ -556,6 +561,7 @@ async function prepareMusicStreamData(response) {
         };
       })
     );
+    console.log(`[router] [timing] prepareMusicStreamData (dj_response): ${Date.now() - t0}ms, ${queries.length} queries`);
 
     return {
       type: "dj_response",
@@ -707,16 +713,21 @@ export async function routeMessageStream(message, emitter) {
 
   // 对话：先保存用户消息，再流式调用 Claude
   saveMessage("user", message);
+
+  const t0 = Date.now();
   const { prompt, staticContent, dynamicContent } = await buildPrompt(message);
+  console.log(`[router] [timing] buildPrompt: ${Date.now() - t0}ms`);
 
   let fullText = "";
 
   // Claude 流式输出（使用 Prompt Caching 拆分格式降低首 token 延迟）
+  const t1 = Date.now();
   await callClaudeStream({ staticContent, dynamicContent }, message, {
     onTextDelta: (delta) => {
       fullText += delta;
     },
   });
+  console.log(`[router] [timing] claudeStream: ${Date.now() - t1}ms, chars: ${fullText.length}`);
 
   // Claude 响应完成，解析 action 并保存
   const response = parseResponse(fullText);
@@ -737,6 +748,7 @@ export async function routeMessageStream(message, emitter) {
   emitter.emit("text", { delta: "", done: true });
 
   // 并行：TTS 合成 + 歌曲检索/解锁
+  const t2 = Date.now();
   const ttsPromise = sayText
     ? streamTtsSay(sayText, response.params?.emotion).catch(() => {})
     : Promise.resolve();
@@ -747,12 +759,15 @@ export async function routeMessageStream(message, emitter) {
     : Promise.resolve(null);
 
   // 等待 TTS 合成和歌曲数据准备同时完成
-  const [, musicData] = await Promise.all([ttsPromise, musicPrepPromise]);
+  const [ttsResult, musicData] = await Promise.all([ttsPromise, musicPrepPromise]);
+  console.log(`[router] [timing] TTS+MusicPrep: ${Date.now() - t2}ms (TTS: ${ttsResult?.duration || 'N/A'}ms, Music: ${musicData ? 'ok' : 'null'})`);
 
   // TTS 完成后，提交音乐播放副作用
   if (musicData) {
+    const t3 = Date.now();
     try {
       await commitMusicStreamAndEmit(musicData, emitter);
+      console.log(`[router] [timing] commitMusicStreamAndEmit: ${Date.now() - t3}ms`);
     } catch (err) {
       console.error(`[router] commitMusicStreamAndEmit error: ${err.message}`);
     }
