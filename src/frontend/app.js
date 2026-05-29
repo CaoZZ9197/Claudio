@@ -10,6 +10,10 @@ let isConnected = false;
 let ttsPendingChunks = [];
 let ttsBlobUrl = null;
 let lastTtsText = ""; // 保存 TTS 文本用于降级播放
+// 渐进式播放（MediaSource API）
+let ttsMediaSource = null;
+let ttsSourceBuffer = null;
+let ttsSbPending = []; // SourceBuffer 繁忙时暂存 chunk
 let musicQueue = [];          // 待播放歌曲队列
 let isMusicPlaying = false;   // 当前是否正在播放音乐（区别于 TTS）
 let fetchGeneration = 0;      // 续播请求代际，队列替换时递增，过期响应直接丢弃
@@ -56,6 +60,7 @@ function connectWS() {
   }
 
   ws = new WebSocket(WS_URL);
+  ws.binaryType = "arraybuffer";
 
   ws.addEventListener("open", () => {
     isConnected = true;
@@ -83,9 +88,9 @@ function connectWS() {
       } catch {
         // ignore
       }
-    } else if (event.data instanceof Blob) {
+    } else if (event.data instanceof ArrayBuffer) {
       // Binary audio chunk (TTS streaming)
-      handleTtsAudioChunk(event.data);
+      handleTtsAudioChunk(new Uint8Array(event.data));
     }
   });
 
@@ -132,60 +137,133 @@ function handlePlayerState(state) {
 // ── TTS lifecycle handlers ────────────────────────────────────────────────────
 
 function handleTtsStart({ text }) {
-  console.log("[tts] MiniMax TTS starting:", text?.slice(0, 40));
+  console.log("[tts] TTS starting:", text?.slice(0, 40));
   isTtsActive = true;
-  ttsPendingChunks = [];
   lastTtsText = text || "";
-  // 先停止当前播放的 TTS 音频，再释放 Blob URL
+
+  // 停掉当前 TTS 音频
   if (!ttsAudioEl.paused) {
     ttsAudioEl.pause();
     ttsAudioEl.removeAttribute("src");
   }
   releaseTtsBlobUrl();
 
+  // 尝试使用 MediaSource 实现渐进式播放（边收边播）
+  const canUseMediaSource = typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg");
+  if (canUseMediaSource) {
+    ttsMediaSource = new MediaSource();
+    ttsBlobUrl = URL.createObjectURL(ttsMediaSource);
+    ttsAudioEl.src = ttsBlobUrl;
+    ttsSbPending = []; // 统一缓冲区：sourceopen 前和 SourceBuffer busy 时都放这里
+
+    ttsMediaSource.addEventListener("sourceopen", () => {
+      try {
+        ttsSourceBuffer = ttsMediaSource.addSourceBuffer("audio/mpeg");
+        ttsSourceBuffer.addEventListener("updateend", drainSbPending);
+        ttsSourceBuffer.addEventListener("error", (e) => {
+          console.warn("[tts] SourceBuffer error:", e);
+        });
+        // 立即消费已积压的 chunk
+        drainSbPending();
+      } catch (e) {
+        console.warn("[tts] MediaSource setup failed, using blob fallback:", e.message);
+        // 回退到 Blob 模式，保留已收到的 chunk
+        ttsPendingChunks = ttsSbPending.slice();
+        cleanupMediaSource();
+        // 如果 handleTtsEnd 已经执行过（isTtsActive=false），立即走 Blob 播放
+        if (!isTtsActive && ttsPendingChunks.length > 0) {
+          playBlobFromChunks();
+        }
+      }
+    });
+    ttsPendingChunks = [];
+  } else {
+    // 不支持 MediaSource，使用传统 Blob 模式
+    ttsMediaSource = null;
+    ttsSourceBuffer = null;
+    ttsPendingChunks = [];
+  }
+
   // 压低音乐音量（ducking），不暂停
   mainAudioEl.volume = (volumeSlider.value / 100) * 0.3;
 }
 
+/** 消费 ttsSbPending 队列，将 chunk 送入 SourceBuffer */
+function drainSbPending() {
+  if (!ttsSourceBuffer || ttsSourceBuffer.updating) return;
+  while (ttsSbPending.length > 0) {
+    try {
+      ttsSourceBuffer.appendBuffer(ttsSbPending.shift());
+      return; // appendBuffer 是异步的，等 updateend 继续
+    } catch {
+      // 跳过坏 chunk，继续尝试下一个
+    }
+  }
+}
+
+function cleanupMediaSource() {
+  if (ttsSourceBuffer) {
+    try { ttsSourceBuffer.abort(); } catch {}
+    ttsSourceBuffer = null;
+  }
+  if (ttsMediaSource) {
+    if (ttsMediaSource.readyState === "open") {
+      try { ttsMediaSource.endOfStream(); } catch {}
+    }
+    ttsMediaSource = null;
+  }
+  ttsSbPending = [];
+}
+
 function handleTtsEnd() {
-  // 防重入：若非活跃 TTS 会话，忽略重复的 tts_end 事件
   if (!isTtsActive) {
     console.log("[tts] handleTtsEnd called but TTS not active, ignoring");
     return;
   }
-  console.log("[tts] MiniMax TTS ended, starting playback");
+  console.log("[tts] TTS ended, finalizing playback");
   isTtsActive = false;
 
-  if (ttsPendingChunks.length > 0) {
-    lastTtsText = "";
-    // 所有 chunk 已收齐，合并为单个 Blob 一次性播放
-    const totalSize = ttsPendingChunks.reduce((sum, c) => sum + c.size, 0);
-    console.log("[tts] Creating blob from", ttsPendingChunks.length, "chunks, total size:", totalSize, "bytes");
-    const blob = new Blob(ttsPendingChunks, { type: "audio/mpeg" });
-    console.log("[tts] Blob created, size:", blob.size, "bytes");
-    releaseTtsBlobUrl();
-    ttsBlobUrl = URL.createObjectURL(blob);
-    ttsAudioEl.src = ttsBlobUrl;
-    ttsPendingChunks = [];
-    ttsAudioEl.play().catch((err) => {
-      console.warn("[tts] Play failed, retrying in 500ms:", err.message);
-      setTimeout(() => {
-        ttsAudioEl.play().catch((e) => console.warn("[tts] Retry failed:", e.message));
-      }, 500);
-    }).then(() => {
-      console.log("[tts] Audio started playing, duration:", ttsAudioEl.duration, "s");
-    });
+  if (ttsMediaSource) {
+    // MediaSource 模式（sourceopen 可能尚未或已经触发）
+    const finalize = () => {
+      if (!ttsMediaSource || ttsMediaSource.readyState !== "open") return;
+      if (!ttsSourceBuffer) return; // sourceopen 还没触发，不可能
+      drainSbPending();
+      const finishMedia = () => {
+        if (!ttsMediaSource || ttsMediaSource.readyState !== "open") return;
+        if (ttsSourceBuffer && ttsSourceBuffer.updating) {
+          ttsSourceBuffer.addEventListener("updateend", finishMedia, { once: true });
+        } else {
+          try { ttsMediaSource.endOfStream(); } catch {}
+        }
+      };
+      finishMedia();
+      if (ttsAudioEl.paused) {
+        ttsAudioEl.play().catch(() => {});
+      }
+    };
+
+    if (ttsSourceBuffer) {
+      finalize();
+    } else {
+      // sourceopen 尚未触发，等它触发后再处理
+      ttsMediaSource.addEventListener("sourceopen", finalize, { once: true });
+    }
+  } else if (ttsPendingChunks.length > 0) {
+    // Blob 降级模式
+    playBlobFromChunks();
   } else if (lastTtsText) {
     console.warn("[tts] No audio chunks received, using browser TTS fallback");
     speakWithBrowserTts(lastTtsText);
     lastTtsText = "";
   }
-  // 音频播完后 ended 事件触发 finishTts()
 }
 
 function handleTtsError({ error }) {
-  console.warn("[tts] MiniMax TTS error:", error);
+  console.warn("[tts] TTS error:", error);
   isTtsActive = false;
+  cleanupMediaSource();
+  ttsPendingChunks = [];
   finishTts();
 }
 
@@ -231,11 +309,46 @@ function processMusicAction(data) {
 // ── Audio chunk buffering (WebSocket binary TTS) ──────────────────────────────
 
 function handleTtsAudioChunk(blob) {
-  ttsPendingChunks.push(blob);
-  console.log("[tts] Chunk received:", blob.size, "bytes, total chunks:", ttsPendingChunks.length);
+  if (ttsSourceBuffer && !ttsSourceBuffer.updating && ttsSbPending.length === 0) {
+    // SourceBuffer 就绪且队列空：直接追加
+    try {
+      ttsSourceBuffer.appendBuffer(blob);
+    } catch {
+      ttsSbPending.push(blob);
+    }
+  } else if (ttsMediaSource) {
+    // MediaSource 已创建（sourceopen 前或 SourceBuffer busy 时）：推入统一队列
+    ttsSbPending.push(blob);
+  } else {
+    // Blob 降级模式
+    ttsPendingChunks.push(blob);
+  }
+  // 首帧到达即开始播放
+  if (ttsAudioEl.paused && ttsMediaSource && ttsMediaSource.readyState === "open") {
+    ttsAudioEl.play().catch(() => {});
+  }
+}
+
+function playBlobFromChunks() {
+  if (ttsPendingChunks.length === 0) return;
+  lastTtsText = "";
+  const totalSize = ttsPendingChunks.reduce((sum, c) => sum + (c.byteLength || c.size || 0), 0);
+  console.log("[tts] Creating blob from", ttsPendingChunks.length, "chunks, total size:", totalSize, "bytes");
+  const blob = new Blob(ttsPendingChunks, { type: "audio/mpeg" });
+  releaseTtsBlobUrl();
+  ttsBlobUrl = URL.createObjectURL(blob);
+  ttsAudioEl.src = ttsBlobUrl;
+  ttsPendingChunks = [];
+  ttsAudioEl.play().catch((err) => {
+    console.warn("[tts] Play failed, retrying in 500ms:", err.message);
+    setTimeout(() => {
+      ttsAudioEl.play().catch((e) => console.warn("[tts] Retry failed:", e.message));
+    }, 500);
+  });
 }
 
 function releaseTtsBlobUrl() {
+  cleanupMediaSource();
   if (ttsBlobUrl) {
     URL.revokeObjectURL(ttsBlobUrl);
     ttsBlobUrl = null;
@@ -457,6 +570,13 @@ progressBar.addEventListener("input", () => {
 // ── Now Playing Updates ───────────────────────────────────────────────────────
 
 function updateNowPlaying(track, state) {
+  // 检查歌曲喜欢状态
+  if (track?.originalId) {
+    checkLikedStatus(track.originalId);
+  } else if (!track) {
+    btnLiked.textContent = "♡";
+  }
+
   const playerTitleEl = document.getElementById("player-track-title");
   const playerArtistEl = document.getElementById("player-track-artist");
   const albumArtEl = document.getElementById("album-art");
@@ -973,6 +1093,139 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     status.style.color = "var(--danger)";
   }
 });
+
+// ── Liked Songs Drawer ─────────────────────────────────────────────────────
+
+const likedDrawer = document.getElementById("liked-drawer");
+const likedDrawerOverlay = document.getElementById("liked-drawer-overlay");
+const likedList = document.getElementById("liked-list");
+const btnLiked = document.getElementById("btn-liked");
+const btnOpenLiked = document.getElementById("btn-open-liked");
+const btnCloseLikedDrawer = document.getElementById("btn-close-liked-drawer");
+
+let likedDrawerOpen = false;
+
+function openLikedDrawer() {
+  likedDrawerOpen = true;
+  likedDrawer.hidden = false;
+  likedDrawerOverlay.hidden = false;
+  loadLikedSongs();
+}
+
+function closeLikedDrawer() {
+  likedDrawerOpen = false;
+  likedDrawer.hidden = true;
+  likedDrawerOverlay.hidden = true;
+}
+
+async function loadLikedSongs() {
+  try {
+    const res = await fetch(`${API_BASE}/api/liked`);
+    const data = await res.json();
+    if (data.songs && data.songs.length > 0) {
+      likedList.innerHTML = data.songs.map((song) => `
+        <div class="liked-item" data-source-id="${escapeHtml(song.source_id)}">
+          <div class="liked-item-info">
+            <div class="liked-item-title">${escapeHtml(song.title)}</div>
+            <div class="liked-item-artist">${escapeHtml(song.artist)}</div>
+          </div>
+          <button class="liked-item-remove" data-source-id="${escapeHtml(song.source_id)}">✕</button>
+        </div>
+      `).join("");
+
+      // 点击喜欢列表项播放歌曲
+      likedList.querySelectorAll(".liked-item").forEach((item) => {
+        item.addEventListener("click", async (e) => {
+          if (e.target.classList.contains("liked-item-remove")) return;
+          const sourceId = item.dataset.sourceId;
+          const title = item.querySelector(".liked-item-title").textContent;
+          const artist = item.querySelector(".liked-item-artist").textContent;
+          try {
+            const res = await fetch(`${API_BASE}/api/chat`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message: `播放 ${title} ${artist}` }),
+            });
+            const data = await res.json();
+            if (data.actionResult?.audioUrl) {
+              playAudio(data.actionResult.audioUrl);
+            }
+          } catch {}
+        });
+      });
+
+      // 点击删除按钮取消喜欢
+      likedList.querySelectorAll(".liked-item-remove").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const sourceId = btn.dataset.sourceId;
+          try {
+            await fetch(`${API_BASE}/api/liked/${sourceId}`, { method: "DELETE" });
+            loadLikedSongs();
+            if (playerState.playing?.originalId === sourceId) {
+              btnLiked.textContent = "♡";
+            }
+          } catch {}
+        });
+      });
+    } else {
+      likedList.innerHTML = '<div class="liked-empty">还没有喜欢的歌曲</div>';
+    }
+  } catch (err) {
+    likedList.innerHTML = '<div class="liked-empty">加载失败</div>';
+  }
+}
+
+async function checkLikedStatus(sourceId) {
+  if (!sourceId) {
+    btnLiked.textContent = "♡";
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/liked/check/${sourceId}`);
+    const data = await res.json();
+    btnLiked.textContent = data.liked ? "♥" : "♡";
+  } catch {
+    btnLiked.textContent = "♡";
+  }
+}
+
+async function toggleLiked(song) {
+  if (!song || !song.originalId) return;
+  const wasLiked = btnLiked.textContent === "♥";
+  // 乐观更新
+  btnLiked.textContent = wasLiked ? "♡" : "♥";
+  try {
+    if (wasLiked) {
+      await fetch(`${API_BASE}/api/liked/${song.originalId}`, { method: "DELETE" });
+    } else {
+      await fetch(`${API_BASE}/api/liked`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_id: song.originalId,
+          title: song.title,
+          artist: song.artist,
+          album: song.album || "",
+        }),
+      });
+    }
+  } catch (err) {
+    // 失败回滚
+    btnLiked.textContent = wasLiked ? "♥" : "♡";
+  }
+}
+
+// ── Liked Songs Events ──────────────────────────────────────────────────────
+
+btnLiked?.addEventListener("click", () => {
+  if (!playerState.playing || !playerState.playing.originalId) return;
+  toggleLiked(playerState.playing);
+});
+
+btnOpenLiked?.addEventListener("click", openLikedDrawer);
+btnCloseLikedDrawer?.addEventListener("click", closeLikedDrawer);
+likedDrawerOverlay?.addEventListener("click", closeLikedDrawer);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
