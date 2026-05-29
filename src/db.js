@@ -106,6 +106,10 @@ export function isLiked(sourceId) {
   return !!getLikedSongBySourceId.get({ source_id: sourceId });
 }
 
+export function getLikedSongById(sourceId) {
+  return getLikedSongBySourceId.get({ source_id: sourceId });
+}
+
 export function getLikedSongs(limit = 100, offset = 0) {
   return getAllLikedSongs.all({ limit, offset });
 }

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { routeMessage, routeMessageStream, dispatchAction, handleContinueRadio } from "../router.js";
 import { searchSongs, getPlaylist, controlPlayback, getAudioUrl, getLyrics } from "../music/netease.js";
-import { getRecentPlays, getRecentMessages, getAllPreferences, setPreference, getLikedSongs, addLikedSong, removeLikedSong, isLiked } from "../db.js";
+import { getRecentPlays, getRecentMessages, getAllPreferences, setPreference, getLikedSongs, addLikedSong, removeLikedSong, isLiked, getLikedSongById } from "../db.js";
 import { broadcastState } from "./ws.js";
 import { discoverDevices, castAudio } from "../external/upnp.js";
 import { getCurrentWeather } from "../external/weather.js";
@@ -300,7 +300,8 @@ router.post("/liked", (req, res) => {
       return res.json({ ok: true, already_liked: true });
     }
     addLikedSong({ title, artist: artist || "", album: album || "", sourceId: source_id });
-    res.json({ ok: true });
+    const song = getLikedSongById(source_id);
+    res.json({ ok: true, song });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
