@@ -1,4 +1,5 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import config from "./config.js";
 import { getRecentMessages } from "./db.js";
@@ -23,35 +24,40 @@ const DEFAULT_DJ_PERSONA = `你是 Claudio，一位私人 AI 电台 DJ。你温�
 
 // ── File readers ────────────────────────────────────────────────────────────────
 
-function readFileSafe(filePath) {
+async function readFileSafe(filePath) {
   if (!existsSync(filePath)) return null;
   try {
-    return readFileSync(filePath, "utf-8");
+    return await readFile(filePath, "utf-8");
   } catch {
     return null;
   }
 }
 
-function readTasteFile(filename) {
+async function readTasteFile(filename) {
   const path = resolve(config.paths.data, filename);
   return readFileSafe(path);
 }
 
-function loadPromptFile(name) {
+async function loadPromptFile(name) {
   const path = resolve(config.paths.prompts, name);
   return readFileSafe(path);
 }
 
 // ── Taste profiles ──────────────────────────────────────────────────────────────
 
-function loadTasteProfiles() {
+async function loadTasteProfiles() {
   const results = {};
   const missing = [];
+  const entries = Object.entries(TASTE_FILES);
 
-  for (const [key, filename] of Object.entries(TASTE_FILES)) {
-    const content = readTasteFile(filename);
-    if (content !== null) {
-      results[key] = content;
+  const contents = await Promise.all(
+    entries.map(([, filename]) => readTasteFile(filename))
+  );
+
+  for (let i = 0; i < entries.length; i++) {
+    const [key, filename] = entries[i];
+    if (contents[i] !== null) {
+      results[key] = contents[i];
     } else {
       missing.push(filename);
     }
@@ -91,16 +97,14 @@ async function loadHistory(limit = 10) {
   }
 }
 
-// ── Prompt assembly ─────────────────────────────────────────────────────────────
+// ── Static content (for prompt caching) ─────────────────────────────────────────
 
-function assemblePrompt({ djPersona, taste, moodRules, playlists, routines, weather, calendar, history }) {
+function buildStaticContent({ djPersona, taste, moodRules, playlists, routines }) {
   const sections = [];
 
-  // DJ Persona — 优先从文件加载，否则用默认
   sections.push(djPersona || DEFAULT_DJ_PERSONA);
   sections.push("");
 
-  // User taste profiles
   if (taste) {
     sections.push("## 用户音乐品味");
     sections.push(taste.trim());
@@ -116,8 +120,7 @@ function assemblePrompt({ djPersona, taste, moodRules, playlists, routines, weat
   if (playlists) {
     sections.push("## 用户歌单");
     try {
-      const parsed = JSON.parse(playlists);
-      sections.push(JSON.stringify(parsed, null, 2));
+      sections.push(JSON.stringify(JSON.parse(playlists), null, 2));
     } catch {
       sections.push(playlists.trim());
     }
@@ -130,7 +133,12 @@ function assemblePrompt({ djPersona, taste, moodRules, playlists, routines, weat
     sections.push("");
   }
 
-  // Current environment
+  return sections.join("\n");
+}
+
+function buildDynamicContent({ weather, calendar, history }) {
+  const sections = [];
+
   sections.push("## 当前环境");
   const now = new Date();
   sections.push(`当前时间: ${now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`);
@@ -153,7 +161,6 @@ function assemblePrompt({ djPersona, taste, moodRules, playlists, routines, weat
 
   sections.push("");
 
-  // Conversation history
   sections.push("## 对话历史");
   if (history && history.length > 0) {
     for (const msg of history) {
@@ -169,13 +176,23 @@ function assemblePrompt({ djPersona, taste, moodRules, playlists, routines, weat
   return sections.join("\n");
 }
 
+// ── Prompt assembly ─────────────────────────────────────────────────────────────
+
+function assemblePrompt({ djPersona, taste, moodRules, playlists, routines, weather, calendar, history }) {
+  const staticPart = buildStaticContent({ djPersona, taste, moodRules, playlists, routines });
+  const dynamicPart = buildDynamicContent({ weather, calendar, history });
+  return staticPart + "\n" + dynamicPart;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────────
 
 export async function buildContext(tasteLimit = 20) {
-  const { profiles, missing } = loadTasteProfiles();
-  const env = getEnvironmentData();
-  const history = await loadHistory(tasteLimit);
-  const djPersona = loadPromptFile("dj-persona.md");
+  const [{ profiles, missing }, env, history, djPersona] = await Promise.all([
+    loadTasteProfiles(),
+    Promise.resolve(getEnvironmentData()),
+    loadHistory(tasteLimit),
+    loadPromptFile("dj-persona.md"),
+  ]);
 
   return {
     djPersona,
@@ -192,27 +209,25 @@ export async function buildContext(tasteLimit = 20) {
 
 export async function buildPrompt(userMessage, tasteLimit = 20) {
   const context = await buildContext(tasteLimit);
-  const prompt = assemblePrompt({ ...context, history: context.history });
-  return { prompt, context };
+  const staticContent = buildStaticContent(context);
+  const dynamicContent = buildDynamicContent({ weather: context.weather, calendar: context.calendar, history: context.history });
+  const prompt = staticContent + "\n" + dynamicContent;
+  return { prompt, staticContent, dynamicContent, context };
 }
 
 // ── Radio continuation prompt ─────────────────────────────────────────────────
 
-/**
- * 构建电台续播提示词。
- * 当有活跃 session 时，基于场景上下文请求更多歌曲。
- * 当无 session 时，基于用户品味档案默认推荐。
- */
 export async function buildContinuePrompt(session) {
-  const { profiles } = loadTasteProfiles();
-  const env = getEnvironmentData();
-  const djPersona = loadPromptFile("dj-persona.md");
+  const [{ profiles }, env, djPersona] = await Promise.all([
+    loadTasteProfiles(),
+    Promise.resolve(getEnvironmentData()),
+    loadPromptFile("dj-persona.md"),
+  ]);
 
   const sections = [];
   sections.push(djPersona || DEFAULT_DJ_PERSONA);
   sections.push("");
 
-  // 用户品味（续播也需要参考）
   if (profiles.taste) {
     sections.push("## 用户音乐品味");
     sections.push(profiles.taste.trim());
@@ -225,7 +240,6 @@ export async function buildContinuePrompt(session) {
     sections.push("");
   }
 
-  // 当前环境
   const now = new Date();
   sections.push("## 当前环境");
   sections.push(`当前时间: ${now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`);
@@ -234,7 +248,6 @@ export async function buildContinuePrompt(session) {
   }
   sections.push("");
 
-  // 续播请求（核心）
   sections.push("## 用户请求（系统自动续播）");
 
   if (session) {

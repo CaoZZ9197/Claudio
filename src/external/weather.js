@@ -4,7 +4,7 @@ import { getCached, setCached, isCacheValid } from "../cache.js";
 const BASE = "https://api.openweathermap.org/data/2.5";
 
 async function fetchJson(url) {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) {
     throw new Error(`OpenWeather API error: ${res.status} ${res.statusText}`);
   }

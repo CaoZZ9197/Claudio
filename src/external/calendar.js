@@ -23,6 +23,7 @@ async function getTenantAccessToken() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ app_id: feishuAppId, app_secret: feishuAppSecret }),
+    signal: AbortSignal.timeout(10000),
   });
   const data = await res.json();
   if (data.code !== 0) throw new Error(`Feishu auth error: ${data.msg}`);
@@ -54,7 +55,7 @@ export async function getTodayEvents(forceRefresh = false) {
 
     const res = await fetch(
       `${BASE}/calendar/v4/calendars/primary/events?start_time=${today}T00:00:00&end_time=${today}T23:59:59`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) }
     );
     const data = await res.json();
 

@@ -1,0 +1,13 @@
+# 实现原理
+分为 1、2、3 三个步骤：
+1. 播放器界面 (a player)
+ PWA版本。
+2. 本地服务器 (a local server)
+核心：“做所有事情的 中枢 ”。
+技术栈：“Node.js”。
+3. 几个 API (a few APIs)
+claude、netease、upnp、fish、weather、feishu“各自管一件事”。
+“Claude 做大脑 · 网易云音乐负责音乐”
+“Fish Audio 做语音合成 · 飞书 API 读我的日程”
+“OpenWeather 接天气 · UPnP 推音乐到家庭音响”
+

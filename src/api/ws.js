@@ -7,8 +7,19 @@ let currentStreamState = { state: "stopped", track: null, position: 0 };
 export function setupWebSocket(server) {
   const wss = new WebSocketServer({ server, path: "/stream" });
 
+  // 心跳保活：每 30 秒 ping 所有客户端，防止代理/负载均衡器因空闲断开
+  const heartbeat = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.readyState === ws.OPEN) ws.ping();
+    });
+  }, 30000);
+
   wss.on("error", (err) => {
     console.error("[ws] Server error:", err.message);
+  });
+
+  wss.on("close", () => {
+    clearInterval(heartbeat);
   });
 
   wss.on("connection", (ws, req) => {

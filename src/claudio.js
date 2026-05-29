@@ -14,6 +14,22 @@ const SUPPORTED_ACTIONS = new Set([
 
 let client;
 
+/**
+ * 将 systemPrompt 标准化为 API 所需格式。
+ * 字符串 → 原样返回（向后兼容）
+ * { staticContent, dynamicContent } → 数组格式，静态部分带 cache_control
+ */
+function buildSystemParam(systemPrompt) {
+  if (typeof systemPrompt === "string") return systemPrompt;
+  if (systemPrompt && systemPrompt.staticContent) {
+    return [
+      { type: "text", text: systemPrompt.staticContent, cache_control: { type: "ephemeral" } },
+      { type: "text", text: systemPrompt.dynamicContent || "" },
+    ];
+  }
+  return systemPrompt;
+}
+
 function getClient() {
   if (!client) {
     const opts = {
@@ -41,8 +57,8 @@ export async function sendToClaude(systemPrompt, userMessage) {
 
   const response = await anthropic.messages.create({
     model: config.model,
-    max_tokens: 1536,  // DJ JSON 响应（含 session 字段时约 800-1200 字符）
-    system: systemPrompt,
+    max_tokens: 1536,
+    system: buildSystemParam(systemPrompt),
     messages: [{ role: "user", content: userMessage }],
     thinking: { type: "disabled" },
   });
@@ -155,7 +171,7 @@ export async function callClaudeStream(systemPrompt, userMessage, { onTextDelta 
   const stream = await anthropic.messages.stream({
     model: config.model,
     max_tokens: 1536,
-    system: systemPrompt,
+    system: buildSystemParam(systemPrompt),
     messages: [{ role: "user", content: userMessage }],
     thinking: { type: "disabled" },
   });

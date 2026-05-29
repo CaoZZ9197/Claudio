@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "ncm-cli-setup": {
+      "source": "NetEase/skills",
+      "sourceType": "github",
+      "skillPath": "ncm-cli-setup/SKILL.md",
+      "computedHash": "6797aad5dc43767d4a5f5d90148df3481cfcb04179bbf32d3326e67b35e490da"
+    }
+  }
+}

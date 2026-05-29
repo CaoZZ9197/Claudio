@@ -699,12 +699,12 @@ export async function routeMessageStream(message, emitter) {
 
   // 对话：先保存用户消息，再流式调用 Claude
   saveMessage("user", message);
-  const { prompt } = await buildPrompt(message);
+  const { prompt, staticContent, dynamicContent } = await buildPrompt(message);
 
   let fullText = "";
 
-  // Claude 流式输出，收集完整响应（不推送给前端，避免显示原始 JSON）
-  await callClaudeStream(prompt, message, {
+  // Claude 流式输出（使用 Prompt Caching 拆分格式降低首 token 延迟）
+  await callClaudeStream({ staticContent, dynamicContent }, message, {
     onTextDelta: (delta) => {
       fullText += delta;
     },

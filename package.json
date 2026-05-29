@@ -1,0 +1,27 @@
+{
+  "name": "claudio",
+  "version": "1.0.0",
+  "description": "Personal AI radio — localhost smart player with Claude AI, music streaming, TTS, and voice broadcast",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "generate-icons": "node scripts/generate-icons.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "sharp": "^0.34.5"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.97.1",
+    "@neteasecloudmusicapienhanced/api": "^4.32.1",
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "msedge-tts": "^2.0.5",
+    "node-cron": "^4.2.1",
+    "ws": "^8.20.1"
+  }
+}

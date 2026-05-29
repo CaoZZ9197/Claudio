@@ -1,0 +1,15 @@
+name: minimax-tts-websocket-streaming
+description: MiniMax WebSocket 流式语音合成 - Claudio 回复内容实时语音播报
+status: artifacts_ready
+artifacts:
+  - id: proposal
+    status: done
+    path: openspec/changes/minimax-tts-websocket-streaming/proposal.md
+  - id: design
+    status: done
+    path: openspec/changes/minimax-tts-websocket-streaming/design.md
+  - id: tasks
+    status: done
+    path: openspec/changes/minimax-tts-websocket-streaming/tasks.md
+applyRequires: []
+created: 2026-05-26
