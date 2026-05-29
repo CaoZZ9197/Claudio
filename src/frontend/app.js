@@ -572,6 +572,8 @@ progressBar.addEventListener("input", () => {
 // ── Now Playing Updates ───────────────────────────────────────────────────────
 
 function updateNowPlaying(track, state) {
+  currentSong = track;
+
   // 检查歌曲喜欢状态
   if (track?.originalId) {
     checkLikedStatus(track.originalId);
