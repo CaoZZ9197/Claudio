@@ -22,6 +22,9 @@ const config = Object.freeze({
   // 三方大模型 API 代理地址（MiniMax 等 Anthropic 兼容 API）
   anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL || null,
 
+  // 播放历史保留天数（默认14天）
+  playHistoryDays: parseInt(process.env.PLAY_HISTORY_DAYS, 10) || 14,
+
   apiKeys: Object.freeze({
     anthropic: process.env.ANTHROPIC_API_KEY || null,
 
