@@ -47,7 +47,7 @@ class EdgeTTS {
 
       if (paramsChanged) {
         console.log(`[edge-tts] Voice: ${voice}, Rate: ${rate}, Pitch: ${pitch}`);
-        await this._tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        await this._tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3, {});
         this._lastVoice = voice;
         this._lastRate = rate;
         this._lastPitch = pitch;
@@ -76,7 +76,9 @@ class EdgeTTS {
       // 连接可能已断开，重建实例重试一次
       console.warn("[edge-tts] Stream error, retrying with new connection:", err.message);
       this._tts = new MsEdgeTTS();
-      await this._tts.setMetadata(this._lastVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+      await this._tts.setMetadata(this._lastVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3, {});
+      this._lastRate = null; // force re-set next time
+      this._lastPitch = null;
       const { audioStream } = this._tts.toStream(text.trim(), { rate, pitch });
       let audioSize = 0;
       for await (const chunk of audioStream) {
