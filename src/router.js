@@ -538,14 +538,16 @@ async function prepareMusicStreamData(response) {
       .filter(Boolean);
 
     const results = await Promise.all(
-      queries.map(async (query) => {
+      queries.map(async (query, index) => {
         const searchResult = await searchSongs(query, 30);
         if (searchResult.status !== "ok" || searchResult.songs.length === 0) {
           return { error: "no_results", query };
         }
         const song = searchResult.songs[0];
-        // 立即后台解锁，不阻塞（与 TTS 并行）
-        unlockSong(song);
+        // 只解锁第一首歌，后续歌曲在播放时才解锁，减少响应延迟
+        if (index === 0) {
+          unlockSong(song);
+        }
         return {
           song,
           allSongs: searchResult.songs,
