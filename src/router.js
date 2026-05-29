@@ -5,7 +5,7 @@ import { searchSongs, playSong, controlPlayback, unlockSong } from "./music/nete
 import { broadcastState, broadcast, broadcastAudio, broadcastTtsStart, broadcastTtsEnd, broadcastTtsError } from "./api/ws.js";
 import { getTTS } from "./tts-adapter.js";
 import { getSession, setSession, clearSession, addPlayedSong, getPlayedIds, clearQueue } from "./radio-session.js";
-import { saveMessage } from "./db.js";
+import { saveMessage, getPlayedSongIds } from "./db.js";
 import { getCurrentWeather } from "./external/weather.js";
 import { getTodayEvents } from "./external/calendar.js";
 
@@ -93,8 +93,13 @@ async function handleMusicCommand(query, opts = {}) {
   }
 
   const { excludeIds = [], radioMode = false } = opts;
+
+  // 合并：会话级 excludeIds + 数据库中最近 N 天已播放的 songId
+  const dbPlayedIds = getPlayedSongIds(config.playHistoryDays);
+  const mergedExcludeIds = [...new Set([...excludeIds, ...dbPlayedIds])];
+
   const searchLimit = radioMode ? 50 : 30;
-  const result = await searchSongs(searchQuery, searchLimit, excludeIds);
+  const result = await searchSongs(searchQuery, searchLimit, mergedExcludeIds);
   if (result.status !== "ok" || result.songs.length === 0) {
     return { error: "no_results", message: `没有找到"${searchQuery}"相关的歌曲` };
   }
