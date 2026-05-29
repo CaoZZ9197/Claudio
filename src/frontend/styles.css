@@ -238,20 +238,45 @@ body::before {
   right: 8px;
   width: 26px;
   height: 26px;
-  font-size: 13px;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  background: var(--surface2);
   color: var(--text-dim);
-  transition: color 0.2s, transform 0.2s;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: none;
+  cursor: pointer;
+  box-shadow:
+    3px 0 0 var(--border),
+    -3px 0 0 var(--border),
+    0 3px 0 var(--border),
+    0 -3px 0 var(--border);
+  transition: color 0.2s, box-shadow 0.2s;
 }
 
 .btn-like-current.liked {
   color: var(--danger);
-  border-color: var(--danger);
+  box-shadow:
+    3px 0 0 var(--border),
+    -3px 0 0 var(--border),
+    0 3px 0 var(--border),
+    0 -3px 0 var(--border);
 }
 
 .btn-like-current:hover {
-  transform: scale(1.1);
+  color: var(--accent);
+  box-shadow:
+    3px 0 0 var(--accent),
+    -3px 0 0 var(--accent),
+    0 3px 0 var(--accent),
+    0 -3px 0 var(--accent);
+}
+
+.btn-like-current.liked:hover {
+  color: var(--danger);
+  box-shadow:
+    3px 0 0 var(--accent),
+    -3px 0 0 var(--accent),
+    0 3px 0 var(--accent),
+    0 -3px 0 var(--accent);
 }
 
 .album-art {
