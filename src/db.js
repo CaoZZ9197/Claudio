@@ -74,6 +74,39 @@ export function getRecentPlays(limit = 50) {
   return getPlays.all({ limit });
 }
 
+// ── Play History Cleanup ─────────────────────────────────────────────────────
+
+const getPlayedIdsStmt = db.prepare(
+  "SELECT source_id FROM plays WHERE timestamp >= datetime('now', @daysDiff)"
+);
+
+const cleanupOldPlaysStmt = db.prepare(
+  "DELETE FROM plays WHERE timestamp < datetime('now', @daysDiff)"
+);
+
+/**
+ * 返回最近 N 天已播放的 source_id 数组（用于搜索去重）
+ * @param {number} days - 天数，默认 14
+ * @returns {string[]} source_id 数组
+ */
+export function getPlayedSongIds(days = 14) {
+  const rows = getPlayedIdsStmt.all({ daysDiff: `-${days} days` });
+  return rows.map((r) => r.source_id).filter(Boolean);
+}
+
+/**
+ * 清理超过保留天数的播放记录
+ * @param {number} days - 天数，默认 14
+ * @returns {number} 删除的记录数
+ */
+export function cleanupOldPlays(days = 14) {
+  const result = cleanupOldPlaysStmt.run({ daysDiff: `-${days} days` });
+  if (result.changes > 0) {
+    console.log(`[db] Cleaned up ${result.changes} old play records`);
+  }
+  return result.changes;
+}
+
 // ── Liked Songs ─────────────────────────────────────────────────────────────
 
 const insertLikedSong = db.prepare(
