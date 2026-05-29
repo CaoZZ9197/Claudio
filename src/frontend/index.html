@@ -89,8 +89,20 @@
       <div class="player-footer">
         <button class="ctrl-btn pixel-btn" id="btn-player-play" title="播放">►</button>
         <button class="ctrl-btn pixel-btn" id="btn-install" title="安装应用" hidden>+</button>
+        <button class="ctrl-btn pixel-btn" id="btn-open-liked" title="喜欢列表">♥</button>
+        <button class="ctrl-btn pixel-btn" id="btn-liked" title="喜欢">♡</button>
         <button class="ctrl-btn pixel-btn" id="btn-open-settings" title="设置">⚙</button>
       </div>
+    </aside>
+
+    <!-- ═══ Liked Songs Drawer ═══ -->
+    <div class="drawer-overlay" id="liked-drawer-overlay" hidden></div>
+    <aside class="liked-drawer" id="liked-drawer" hidden>
+      <div class="drawer-header">
+        <span class="drawer-title">我喜欢</span>
+        <button class="ctrl-btn pixel-btn" id="btn-close-liked-drawer">✕</button>
+      </div>
+      <div class="liked-list" id="liked-list"></div>
     </aside>
 
     <!-- ═══ RIGHT: Chat Panel ═══ -->
