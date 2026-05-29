@@ -1,7 +1,7 @@
 import express from "express";
 import http from "node:http";
 import config from "./config.js";
-import { closeDb } from "./db.js";
+import { closeDb, cleanupOldPlays } from "./db.js";
 import routes from "./api/routes.js";
 import { setupWebSocket } from "./api/ws.js";
 import { initScheduler } from "./scheduler.js";
@@ -103,6 +103,9 @@ process.on("unhandledRejection", (reason) => {
 Promise.resolve(initAuth()).catch((err) => {
   console.error("[auth] initAuth failed:", err.message);
 });
+
+// 启动时清理过期的播放历史记录
+cleanupOldPlays(config.playHistoryDays);
 
 server.listen(config.port, () => {
     console.log(`Claudio AI Radio — http://localhost:${config.port}`);
