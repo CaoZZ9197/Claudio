@@ -1113,21 +1113,33 @@ function openLikedDrawer() {
   likedDrawerOpen = true;
   likedDrawer.hidden = false;
   likedDrawerOverlay.hidden = false;
-  loadLikedSongs();
+  loadLikedSongs(likedSearchInput?.value || "");
 }
 
 function closeLikedDrawer() {
   likedDrawerOpen = false;
   likedDrawer.hidden = true;
   likedDrawerOverlay.hidden = true;
+  if (likedSearchInput) likedSearchInput.value = "";
 }
 
-async function loadLikedSongs() {
+async function loadLikedSongs(searchQuery = "") {
   try {
     const res = await fetch(`${API_BASE}/api/liked`);
     const data = await res.json();
-    if (data.songs && data.songs.length > 0) {
-      likedList.innerHTML = data.songs.map((song) => `
+    let songs = data.songs || [];
+
+    // 搜索过滤
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      songs = songs.filter((song) =>
+        song.title.toLowerCase().includes(q) ||
+        song.artist.toLowerCase().includes(q)
+      );
+    }
+
+    if (songs.length > 0) {
+      likedList.innerHTML = songs.map((song) => `
         <div class="liked-item" data-source-id="${escapeHtml(song.source_id)}">
           <div class="liked-item-info">
             <div class="liked-item-title">${escapeHtml(song.title)}</div>
@@ -1137,7 +1149,9 @@ async function loadLikedSongs() {
         </div>
       `).join("");
     } else {
-      likedList.innerHTML = '<div class="liked-empty">还没有喜欢的歌曲</div>';
+      likedList.innerHTML = searchQuery
+        ? '<div class="liked-empty">没有找到匹配的歌曲</div>'
+        : '<div class="liked-empty">还没有喜欢的歌曲</div>';
     }
   } catch (err) {
     likedList.innerHTML = '<div class="liked-empty">加载失败</div>';
@@ -1151,7 +1165,7 @@ likedList.addEventListener("click", (e) => {
     e.stopPropagation();
     const sourceId = removeBtn.dataset.sourceId;
     fetch(`${API_BASE}/api/liked/${sourceId}`, { method: "DELETE" })
-      .then(() => loadLikedSongs())
+      .then(() => loadLikedSongs(likedSearchInput?.value || ""))
       .catch(() => {});
     if (currentSong?.originalId === sourceId) {
       btnLiked.textContent = "♡";
@@ -1176,6 +1190,12 @@ likedList.addEventListener("click", (e) => {
       })
       .catch(() => {});
   }
+});
+
+// 搜索输入事件
+const likedSearchInput = document.getElementById("liked-search-input");
+likedSearchInput?.addEventListener("input", () => {
+  loadLikedSongs(likedSearchInput.value);
 });
 
 async function checkLikedStatus(sourceId) {

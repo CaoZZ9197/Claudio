@@ -230,7 +230,21 @@ body::before {
 
 /* ── Player Display ────────────────────────────────────────────────────────── */
 
-.player-display { text-align: center; }
+.player-display { text-align: center; position: relative; }
+
+.btn-like-current {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 20px;
+  color: var(--text-dim);
+  transition: color 0.2s, transform 0.2s;
+}
+
+.btn-like-current:hover {
+  color: var(--accent);
+  transform: scale(1.1);
+}
 
 .album-art {
   width: 120px;
@@ -1068,6 +1082,27 @@ input[type=range]::-moz-range-thumb {
   font-family: 'Press Start 2P', monospace;
   font-size: 10px;
   color: var(--accent);
+}
+
+.liked-search-box {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.liked-search-box input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.liked-search-box input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .liked-list {
