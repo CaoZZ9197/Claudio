@@ -1169,6 +1169,7 @@ likedList.addEventListener("click", (e) => {
       .catch(() => {});
     if (currentSong?.originalId === sourceId) {
       btnLiked.textContent = "♡";
+      btnLiked.classList.remove("liked");
     }
     return;
   }
@@ -1201,22 +1202,34 @@ likedSearchInput?.addEventListener("input", () => {
 async function checkLikedStatus(sourceId) {
   if (!sourceId) {
     btnLiked.textContent = "♡";
+    btnLiked.classList.remove("liked");
     return;
   }
   try {
     const res = await fetch(`${API_BASE}/api/liked/check/${sourceId}`);
     const data = await res.json();
     btnLiked.textContent = data.liked ? "♥" : "♡";
+    if (data.liked) {
+      btnLiked.classList.add("liked");
+    } else {
+      btnLiked.classList.remove("liked");
+    }
   } catch {
     btnLiked.textContent = "♡";
+    btnLiked.classList.remove("liked");
   }
 }
 
 async function toggleLiked(song) {
   if (!song || !song.originalId) return;
-  const wasLiked = btnLiked.textContent === "♥";
+  const wasLiked = btnLiked.classList.contains("liked");
   // 乐观更新
   btnLiked.textContent = wasLiked ? "♡" : "♥";
+  if (wasLiked) {
+    btnLiked.classList.remove("liked");
+  } else {
+    btnLiked.classList.add("liked");
+  }
   try {
     if (wasLiked) {
       await fetch(`${API_BASE}/api/liked/${song.originalId}`, { method: "DELETE" });
@@ -1235,6 +1248,11 @@ async function toggleLiked(song) {
   } catch (err) {
     // 失败回滚
     btnLiked.textContent = wasLiked ? "♥" : "♡";
+    if (wasLiked) {
+      btnLiked.classList.add("liked");
+    } else {
+      btnLiked.classList.remove("liked");
+    }
   }
 }
 

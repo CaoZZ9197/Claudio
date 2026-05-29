@@ -236,15 +236,21 @@ body::before {
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 32px;
-  height: 32px;
-  font-size: 16px;
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
   color: var(--text-dim);
   transition: color 0.2s, transform 0.2s;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.btn-like-current.liked {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .btn-like-current:hover {
-  color: var(--accent);
   transform: scale(1.1);
 }
 
