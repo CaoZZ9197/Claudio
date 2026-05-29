@@ -5,6 +5,7 @@ import { searchSongs, playSong, controlPlayback, unlockSong } from "./music/nete
 import { broadcastState, broadcast, broadcastAudio, broadcastTtsStart, broadcastTtsEnd, broadcastTtsError } from "./api/ws.js";
 import { getTTS } from "./tts-adapter.js";
 import { getSession, setSession, clearSession, addPlayedSong, getPlayedIds, clearQueue } from "./radio-session.js";
+import config from "./config.js";
 import { saveMessage, getPlayedSongIds } from "./db.js";
 import { getCurrentWeather } from "./external/weather.js";
 import { getTodayEvents } from "./external/calendar.js";
