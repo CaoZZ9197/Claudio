@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { routeMessage, routeMessageStream, dispatchAction, handleContinueRadio } from "../router.js";
 import { searchSongs, getPlaylist, controlPlayback, getAudioUrl, getLyrics } from "../music/netease.js";
-import { getRecentPlays, getRecentMessages, getAllPreferences, setPreference } from "../db.js";
+import { getRecentPlays, getRecentMessages, getAllPreferences, setPreference, getLikedSongs, addLikedSong, removeLikedSong, isLiked } from "../db.js";
 import { broadcastState } from "./ws.js";
 import { discoverDevices, castAudio } from "../external/upnp.js";
 import { getCurrentWeather } from "../external/weather.js";
@@ -243,6 +243,7 @@ router.get("/audio/:trackId", async (req, res) => {
         "Accept": "*/*",
         "Referer": "https://music.163.com/",
       },
+      signal: AbortSignal.timeout(120000),
     });
     console.log(`[api/audio] 上游响应: status=${audioRes.status}, content-type=${audioRes.headers.get("content-type")}, length=${audioRes.headers.get("content-length") || "unknown"}`);
 
@@ -275,6 +276,59 @@ router.get("/audio/:trackId", async (req, res) => {
       res.end();
     }
   }
+});
+
+// ── GET /api/liked ───────────────────────────────────────────────────────────
+
+router.get("/liked", (req, res) => {
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 100));
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  const songs = getLikedSongs(limit, offset);
+  res.json({ songs });
+});
+
+// ── POST /api/liked ──────────────────────────────────────────────────────────
+
+router.post("/liked", (req, res) => {
+  const { source_id, title, artist, album } = req.body;
+  if (!source_id || !title) {
+    return res.status(400).json({ ok: false, error: "source_id and title are required" });
+  }
+  try {
+    const existing = isLiked(source_id);
+    if (existing) {
+      return res.json({ ok: true, already_liked: true });
+    }
+    addLikedSong({ title, artist: artist || "", album: album || "", sourceId: source_id });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── DELETE /api/liked/:sourceId ─────────────────────────────────────────────
+
+router.delete("/liked/:sourceId", (req, res) => {
+  const { sourceId } = req.params;
+  if (!sourceId) {
+    return res.status(400).json({ ok: false, error: "sourceId is required" });
+  }
+  try {
+    removeLikedSong(sourceId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── GET /api/liked/check/:sourceId ──────────────────────────────────────────
+
+router.get("/liked/check/:sourceId", (req, res) => {
+  const { sourceId } = req.params;
+  if (!sourceId) {
+    return res.status(400).json({ liked: false });
+  }
+  res.json({ liked: isLiked(sourceId) });
 });
 
 // ── GET /api/history ───────────────────────────────────────────────────────────
