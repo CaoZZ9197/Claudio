@@ -508,68 +508,13 @@ async function streamTtsSay(text, emotion) {
   }
 }
 
-// ── Theme-based song selection helpers ─────────────────────────────────────────
-
-function buildSongSelectionPrompt(songs, originalSay, theme) {
-  const songList = songs
-    .slice(0, 20)
-    .map((s) => `- ${s.title} - ${s.artist} (id: ${s.id})`)
-    .join("\n");
-
-  return `你是一位专业的音乐 DJ，需要从以下歌曲列表中为用户挑选最合适的 3-5 首。
-
-用户请求的主题是：${theme}
-DJ 之前的播报词是："${originalSay || "暂无"}"
-
-歌曲列表：
-${songList}
-
-请从列表中挑选最符合主题的 3-5 首歌曲，优先选择：
-1. 官方原版，避免翻唱
-2. 热门代表作
-3. 曲风多样但主题一致
-
-请以 JSON 格式返回：
-{
-  "songs": [{"id": "歌曲ID"}, ...],
-  "say": "（可选）如果想修改播报词可以提供，否则使用原来的"
-}`;
-}
-
-function extractJsonFromText(text) {
-  if (!text) return null;
-  const fenceMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-  if (fenceMatch) {
-    try {
-      return JSON.parse(fenceMatch[1].trim());
-    } catch {
-      return null;
-    }
-  }
-  const objMatch = text.match(/\{[\s\S]*\}/);
-  if (objMatch) {
-    try {
-      return JSON.parse(objMatch[0]);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-async function sendToClaudeForSelection(prompt) {
-  const { callClaude } = await import("./claudio.js");
-  const response = await callClaude(prompt, "");
-  return response.params?.text || response.params?.say || "";
-}
-
 // ── Music stream preparation (parallel with TTS) ────────────────────────────────
 
 /**
  * 纯 I/O 阶段：搜索歌曲并获取播放 URL，无副作用。
  * 与 TTS 合成并行执行，返回预取数据供 TTS 完成后提交。
  */
-async function prepareMusicStreamData(response) {
+async function prepareMusicStreamData(response, userMessage) {
   if (response.action === "play_music") {
     const query = response.params?.query || "中文流行";
     const searchResult = await searchSongs(query, 30);
@@ -589,106 +534,86 @@ async function prepareMusicStreamData(response) {
   }
 
   if (response.action === "dj_response" && response.params?.play?.length > 0) {
-    const items = response.params.play;
-    const playParams = items.map((item) =>
-      typeof item === "string" ? { query: item, isTheme: false } : { query: item.query || item.keyword || "", theme: item.theme || "", isTheme: !!item.theme }
-    ).filter((p) => p.query || p.theme);
+    // 方案 B：直接用用户消息搜索 + 规则筛选，不依赖 Claude 生成的 query
+    const searchQuery = userMessage.trim();
+    const t0 = Date.now();
+    const searchResult = await searchSongs(searchQuery, 30);
+    console.log(`[router] [timing] themeSearch (user msg): "${searchQuery}": ${Date.now() - t0}ms, songs: ${searchResult.songs?.length || 0}`);
 
-    // 检测是否为主题模式：play 数组有 theme 字段，或只有一个泛泛的 query（如"中文流行"）
-    const isThemeMode = playParams.some((p) => p.isTheme) || (playParams.length === 1 && !playParams[0].isTheme);
-
-    if (isThemeMode) {
-      // 主题模式：用 theme 搜索 → Claude 精选
-      const theme = playParams.find((p) => p.theme)?.theme || playParams[0].query;
-      const searchQuery = theme.includes("歌曲") ? theme : `${theme} 歌曲`;
-
-      const t0 = Date.now();
-      const searchResult = await searchSongs(searchQuery, 30);
-      console.log(`[router] [timing] themeSearch "${searchQuery}": ${Date.now() - t0}ms, songs: ${searchResult.songs?.length || 0}`);
-
-      if (searchResult.status !== "ok" || searchResult.songs.length === 0) {
-        return { type: "dj_response", error: "no_results", theme, sayText, params: response.params };
-      }
-
-      // Claude 精选：传入歌曲列表，让它挑选 3-5 首并生成播报词
-      const selectionPrompt = buildSongSelectionPrompt(searchResult.songs, response.params.say, theme);
-      const selectionText = await sendToClaudeForSelection(selectionPrompt);
-
-      let selectedSongs = [];
-      let selectedSay = response.params.say || "";
-      try {
-        const selectionJson = extractJsonFromText(selectionText);
-        if (selectionJson && selectionJson.songs) {
-          // 将 songId 映射回完整歌曲信息
-          const selectedIds = new Set(selectionJson.songs.map((s) => String(s.id)));
-          selectedSongs = searchResult.songs.filter((s) => selectedIds.has(s.id));
-          if (selectionJson.say) selectedSay = selectionJson.say;
-        }
-      } catch {
-        // 解析失败，取前 3 首
-        selectedSongs = searchResult.songs.slice(0, 3);
-      }
-
-      if (selectedSongs.length === 0) {
-        selectedSongs = searchResult.songs.slice(0, 3);
-      }
-
-      // 解锁第一首
-      unlockSong(selectedSongs[0]);
-
-      const queue = selectedSongs.slice(1).map((s) => ({
-        song: s,
-        audioUrl: `/api/audio/${s.originalId}`,
-        message: `即将播放：${s.title} - ${s.artist}`,
-      }));
-
-      return {
-        type: "dj_response",
-        songs: selectedSongs,
-        allSongs: searchResult.songs,
-        sayText: selectedSay,
-        queue,
-        theme,
-        params: response.params,
-      };
+    if (searchResult.status !== "ok" || searchResult.songs.length === 0) {
+      return { type: "dj_response", error: "no_results", query: searchQuery, params: response.params };
     }
 
-    // 原有逻辑：每个 query 独立搜索
-    const queries = playParams.map((p) => p.query);
+    let songs = searchResult.songs;
 
-    const t0 = Date.now();
-    const results = await Promise.all(
-      queries.map(async (query, index) => {
-        const tSearch = Date.now();
-        const searchResult = await searchSongs(query, 30);
-        console.log(`[router] [timing] searchSongs[${index}] "${query}": ${Date.now() - tSearch}ms, songs: ${searchResult.songs?.length || 0}`);
-        if (searchResult.status !== "ok" || searchResult.songs.length === 0) {
-          return { error: "no_results", query };
-        }
-        const song = searchResult.songs[0];
-        // 只解锁第一首歌，后续歌曲在播放时才解锁，减少响应延迟
-        if (index === 0) {
-          unlockSong(song);
-        }
-        return {
-          song,
-          allSongs: searchResult.songs,
-          audioUrl: `/api/audio/${song.originalId}`,
-          query,
-        };
-      })
-    );
-    console.log(`[router] [timing] prepareMusicStreamData (dj_response): ${Date.now() - t0}ms, ${queries.length} queries`);
+    // 规则筛选：从搜索结果中选择 3-5 首
+    // 1. 优先选择有完整信息的歌曲（过滤无效数据）
+    // 2. 避免同一艺人连续出现（多样性）
+    // 3. 优先选择播放量较高的（参考 pop 字段，但非绝对）
+    songs = filterAndRankSongs(songs);
+
+    // 只取前 5 首
+    songs = songs.slice(0, 5);
+
+    // 解锁第一首
+    unlockSong(songs[0]);
+
+    const queue = songs.slice(1).map((s) => ({
+      song: s,
+      audioUrl: `/api/audio/${s.originalId}`,
+      message: `即将播放：${s.title} - ${s.artist}`,
+    }));
 
     return {
       type: "dj_response",
-      results,
-      queries,
+      songs,
+      allSongs: searchResult.songs,
+      queue,
+      query: searchQuery,
       params: response.params,
     };
   }
 
   return null;
+}
+
+/**
+ * 规则筛选：对搜索结果进行过滤和排序
+ * 1. 过滤无效数据（无 title、artist）
+ * 2. 多样性：避免同一艺人连续出现
+ * 3. 质量参考：优先有完整信息的歌曲
+ */
+function filterAndRankSongs(songs) {
+  if (!songs || songs.length === 0) return [];
+
+  const result = [];
+  const artistUsed = new Set();
+
+  // 排序：优先完整信息，再考虑 pop（如果有）
+  const sorted = [...songs].sort((a, b) => {
+    // 过滤无效
+    if (!a.title || a.title === "Unknown") return 1;
+    if (!b.title || b.title === "Unknown") return -1;
+    // 有 coverUrl（更可能是正规歌曲）优先
+    if (a.coverUrl && !b.coverUrl) return -1;
+    if (!a.coverUrl && b.coverUrl) return 1;
+    return 0;
+  });
+
+  for (const song of sorted) {
+    if (result.length >= 5) break;
+
+    // 多样性：同一艺人最多 2 首
+    const artistKey = song.artist?.split(",")[0]?.trim() || "";
+    if (artistUsed.has(artistKey) && result.filter((s) => s.artist?.includes(artistKey)).length >= 2) {
+      continue;
+    }
+
+    result.push(song);
+    if (artistKey) artistUsed.add(artistKey);
+  }
+
+  return result;
 }
 
 /**
@@ -926,7 +851,7 @@ export async function routeMessageStream(message, emitter) {
 
   const isMusicAction = response.action === "play_music" || response.action === "dj_response";
   const musicPrepPromise = isMusicAction
-    ? prepareMusicStreamData(response)
+    ? prepareMusicStreamData(response, message)
     : Promise.resolve(null);
 
   // 等待 TTS 合成和歌曲数据准备同时完成
