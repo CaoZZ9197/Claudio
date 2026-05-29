@@ -239,7 +239,7 @@ body::before {
   width: 26px;
   height: 26px;
   font-family: var(--font-pixel);
-  font-size: 10px;
+  font-size: 12px;
   background: var(--surface2);
   color: var(--text-dim);
   border: none;
