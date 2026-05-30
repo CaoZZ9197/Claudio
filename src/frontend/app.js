@@ -1176,17 +1176,32 @@ likedList.addEventListener("click", (e) => {
   const item = e.target.closest(".liked-item");
   if (item) {
     const sourceId = item.dataset.sourceId;
-    const title = item.querySelector(".liked-item-title").textContent;
-    const artist = item.querySelector(".liked-item-artist").textContent;
-    fetch(`${API_BASE}/api/chat`, {
+    fetch(`${API_BASE}/api/liked/play`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: `播放 ${title} ${artist}` }),
+      body: JSON.stringify({ sourceId }),
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.actionResult?.audioUrl) {
-          playAudio(data.actionResult.audioUrl);
+        if (data.ok && data.audioUrl) {
+          // 清空旧队列
+          musicQueue = [];
+          fetchGeneration++;
+          // 设置新队列
+          if (data.queue && data.queue.length > 0) {
+            musicQueue = data.queue.map((q) => ({
+              id: q.song.originalId,
+              title: q.song.title,
+              artist: q.song.artist,
+              audioUrl: q.audioUrl,
+            }));
+          }
+          // 播放
+          playAudio(data.audioUrl);
+          // 更新当前歌曲
+          currentSong = data.song;
+          // 关闭抽屉
+          closeLikedDrawer();
         }
       })
       .catch(() => {});
