@@ -487,9 +487,7 @@ function handleContinueFromLikedList(session) {
       playedIds.add(song.originalId); // 暂时标记为已播放，避免同一首歌重复入队
     }
     // 更新 session.likedIndex（循环）
-    const nextIndex = (session.likedIndex + 1) % liked.length;
-    if (nextIndex === session.likedIndex) break; // 只有一首歌的情况
-    session.likedIndex = nextIndex;
+    session.likedIndex = (session.likedIndex + 1) % liked.length;
   }
 
   return {
