@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { routeMessage, routeMessageStream, dispatchAction, handleContinueRadio } from "../router.js";
+import { routeMessage, routeMessageStream, dispatchAction, handleContinueRadio, handleLikedPlay } from "../router.js";
 import { searchSongs, getPlaylist, controlPlayback, getAudioUrl, getLyrics } from "../music/netease.js";
 import { getRecentPlays, getRecentMessages, getAllPreferences, setPreference, getLikedSongs, addLikedSong, removeLikedSong, isLiked, getLikedSongById } from "../db.js";
 import { broadcastState } from "./ws.js";
@@ -285,6 +285,43 @@ router.get("/liked", (req, res) => {
   const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
   const songs = getLikedSongs(limit, offset);
   res.json({ songs });
+});
+
+// ── POST /api/liked/play ─────────────────────────────────────────────────────
+
+router.post("/liked/play", async (req, res) => {
+  const { sourceId } = req.body;
+
+  if (!sourceId) {
+    return res.status(400).json({ ok: false, error: "sourceId is required" });
+  }
+
+  try {
+    const result = await handleLikedPlay(sourceId);
+
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+
+    // 更新 playerState
+    playerState.playing = result.song;
+    playerState.state = "playing";
+    playerState.position = 0;
+    broadcastState({ state: "playing", track: result.song, position: 0 });
+
+    res.json({
+      ok: true,
+      song: result.song,
+      audioUrl: result.audioUrl,
+      queue: result.queue,
+      message: result.message,
+      source: result.source,
+      likedList: result.likedList,
+    });
+  } catch (err) {
+    console.error(`[api/liked/play] Error: ${err.message}`);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // ── POST /api/liked ──────────────────────────────────────────────────────────
