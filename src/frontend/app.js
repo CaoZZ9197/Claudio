@@ -1187,19 +1187,18 @@ likedList.addEventListener("click", (e) => {
           // 清空旧队列
           musicQueue = [];
           fetchGeneration++;
-          // 设置新队列
+          // 设置新队列（匹配 playNextInQueue 期望的结构）
           if (data.queue && data.queue.length > 0) {
             musicQueue = data.queue.map((q) => ({
-              id: q.song.originalId,
-              title: q.song.title,
-              artist: q.song.artist,
+              song: { originalId: q.song.originalId, title: q.song.title, artist: q.song.artist },
               audioUrl: q.audioUrl,
             }));
           }
+          // 更新当前歌曲并显示 UI
+          currentSong = data.song;
+          updateNowPlaying(data.song, "playing");
           // 播放
           playAudio(data.audioUrl);
-          // 更新当前歌曲
-          currentSong = data.song;
           // 关闭抽屉
           closeLikedDrawer();
         }
