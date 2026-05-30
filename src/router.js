@@ -494,7 +494,7 @@ function handleContinueFromLikedList(session) {
 
   return {
     queue,
-    session: { description: "喜欢列表", source: "liked", likedList: liked },
+    session: { description: "喜欢列表", source: "liked", likedList: liked, likedIndex: session.likedIndex },
     say: null,
     reason: null,
   };
