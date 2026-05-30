@@ -4,9 +4,9 @@ import { searchSongs, playSong, controlPlayback, unlockSong } from "./music/nete
 
 import { broadcastState, broadcast, broadcastAudio, broadcastTtsStart, broadcastTtsEnd, broadcastTtsError } from "./api/ws.js";
 import { getTTS } from "./tts-adapter.js";
-import { getSession, setSession, clearSession, addPlayedSong, getPlayedIds, clearQueue } from "./radio-session.js";
+import { getSession, setSession, clearSession, addPlayedSong, getPlayedIds, clearQueue, setLikedSession, getLikedSession } from "./radio-session.js";
 import config from "./config.js";
-import { saveMessage, getPlayedSongIds } from "./db.js";
+import { saveMessage, getPlayedSongIds, getLikedSongs } from "./db.js";
 import { getCurrentWeather } from "./external/weather.js";
 import { getTodayEvents } from "./external/calendar.js";
 
@@ -871,6 +871,108 @@ export async function routeMessageStream(message, emitter) {
 
   emitter.emit("done", {});
   emitter.close();
+}
+
+// ── Liked list play handler ──────────────────────────────────────────────────
+
+/**
+ * 处理喜欢列表点击播放
+ * @param {string} sourceId - 点击的歌曲 sourceId
+ * @returns {Object} { ok, song, audioUrl, queue, message }
+ */
+export async function handleLikedPlay(sourceId) {
+  const allLiked = getLikedSongs(100, 0);
+
+  if (!allLiked || allLiked.length === 0) {
+    return { ok: false, error: "no_liked_songs", message: "喜欢列表为空" };
+  }
+
+  // 找到点击歌曲在列表中的位置
+  const clickedIndex = allLiked.findIndex((s) => String(s.source_id) === String(sourceId));
+  if (clickedIndex === -1) {
+    return { ok: false, error: "song_not_found", message: "歌曲不在喜欢列表中" };
+  }
+
+  // 重组队列：从点击位置开始，后续歌曲 → 前面歌曲
+  const queueSongs = [];
+  for (let i = 0; i < allLiked.length; i++) {
+    const idx = (clickedIndex + i) % allLiked.length;
+    queueSongs.push(allLiked[idx]);
+  }
+
+  const firstSong = queueSongs[0];
+  const restSongs = queueSongs.slice(1);
+
+  // 获取第一首的播放 URL
+  const playResult = await playSong({
+    encryptedId: firstSong.encryptedId || firstSong.source_id,
+    originalId: firstSong.source_id,
+  });
+
+  if (playResult.status !== "ok") {
+    return { ok: false, error: playResult.status, message: `无法播放${firstSong.title}，${playResult.error}` };
+  }
+
+  addPlayedSong(firstSong.source_id);
+
+  // 解锁剩余歌曲（并行）
+  for (const s of restSongs) {
+    unlockSong({
+      encryptedId: s.encryptedId || s.source_id,
+      originalId: s.source_id,
+    }).catch(() => {});
+  }
+
+  // 构建队列
+  const queue = restSongs.map((s) => ({
+    song: {
+      id: s.source_id,
+      encryptedId: s.encryptedId || s.source_id,
+      originalId: s.source_id,
+      title: s.title,
+      artist: s.artist,
+      album: s.album || "",
+      coverUrl: s.coverUrl || "",
+      duration: s.duration || 0,
+    },
+    audioUrl: null,
+    message: `即将播放：${s.title} - ${s.artist}`,
+  }));
+
+  // 构建 likedList（用于 session）
+  const likedListForSession = queueSongs.map((s) => ({
+    id: s.source_id,
+    encryptedId: s.encryptedId || s.source_id,
+    originalId: s.source_id,
+    title: s.title,
+    artist: s.artist,
+    album: s.album || "",
+    coverUrl: s.coverUrl || "",
+    duration: s.duration || 0,
+  }));
+
+  // 清空旧队列，设置 liked session
+  clearQueue();
+  setLikedSession(likedListForSession, 1); // 下一首从 index 1 开始
+
+  return {
+    ok: true,
+    song: {
+      id: firstSong.source_id,
+      encryptedId: firstSong.encryptedId || firstSong.source_id,
+      originalId: firstSong.source_id,
+      title: firstSong.title,
+      artist: firstSong.artist,
+      album: firstSong.album || "",
+      coverUrl: firstSong.coverUrl || "",
+      duration: firstSong.duration || 0,
+    },
+    audioUrl: playResult.url || null,
+    queue,
+    message: `正在播放：${firstSong.title} - ${firstSong.artist}`,
+    source: "liked",
+    likedList: likedListForSession,
+  };
 }
 
 /**
