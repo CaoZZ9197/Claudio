@@ -18,6 +18,34 @@ export function setSession(session) {
     currentTrack: session.currentTrack || null,
     searchContext: session.searchContext || null,
     startedAt: Date.now(),
+    // 新增字段
+    source: session.source || null,
+    likedList: session.likedList || [],
+    likedIndex: session.likedIndex || 0,
+  };
+}
+
+/**
+ * 设置喜欢列表播放模式
+ * @param {Array} list - 完整喜欢列表
+ * @param {number} startIndex - 起始播放位置
+ */
+export function setLikedSession(list, startIndex = 0) {
+  if (!currentSession) {
+    setSession({});
+  }
+  currentSession.source = "liked";
+  currentSession.likedList = list;
+  currentSession.likedIndex = startIndex;
+}
+
+export function getLikedSession() {
+  if (!currentSession || currentSession.source !== "liked") {
+    return null;
+  }
+  return {
+    list: currentSession.likedList,
+    index: currentSession.likedIndex,
   };
 }
 
@@ -70,4 +98,4 @@ export function getPlayedIds() {
   return currentSession?.playedIds || [];
 }
 
-export default { getSession, setSession, clearSession, addPlayedSong, setQueue, getQueue, dequeueNext, clearQueue, needsRefill, getPlayedIds };
+export default { getSession, setSession, clearSession, addPlayedSong, setQueue, getQueue, dequeueNext, clearQueue, needsRefill, getPlayedIds, setLikedSession, getLikedSession };
