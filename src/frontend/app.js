@@ -1190,7 +1190,7 @@ likedList.addEventListener("click", (e) => {
           // 设置新队列（匹配 playNextInQueue 期望的结构）
           if (data.queue && data.queue.length > 0) {
             musicQueue = data.queue.map((q) => ({
-              song: { originalId: q.song.originalId, title: q.song.title, artist: q.song.artist },
+              song: { originalId: q.song.originalId, title: q.song.title, artist: q.song.artist, coverUrl: q.song.coverUrl || "" },
               audioUrl: q.audioUrl,
             }));
           }
@@ -1256,6 +1256,7 @@ async function toggleLiked(song) {
           title: song.title,
           artist: song.artist,
           album: song.album || "",
+          coverUrl: song.coverUrl || "",
         }),
       });
     }

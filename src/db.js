@@ -34,6 +34,7 @@ db.exec(`
     artist TEXT NOT NULL DEFAULT '',
     album TEXT NOT NULL DEFAULT '',
     source_id TEXT NOT NULL UNIQUE,
+    cover_url TEXT NOT NULL DEFAULT '',
     liked_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
@@ -110,7 +111,7 @@ export function cleanupOldPlays(days = 14) {
 // ── Liked Songs ─────────────────────────────────────────────────────────────
 
 const insertLikedSong = db.prepare(
-  "INSERT OR IGNORE INTO liked_songs (title, artist, album, source_id) VALUES (@title, @artist, @album, @source_id)"
+  "INSERT OR IGNORE INTO liked_songs (title, artist, album, source_id, cover_url) VALUES (@title, @artist, @album, @source_id, @coverUrl)"
 );
 
 const deleteLikedSong = db.prepare(
@@ -122,13 +123,13 @@ const getLikedSongBySourceId = db.prepare(
 );
 
 const getAllLikedSongs = db.prepare(
-  "SELECT id, title, artist, album, source_id, liked_at FROM liked_songs ORDER BY liked_at DESC LIMIT @limit OFFSET @offset"
+  "SELECT id, title, artist, album, source_id, cover_url, liked_at FROM liked_songs ORDER BY liked_at DESC LIMIT @limit OFFSET @offset"
 );
 
 const countLikedSongs = db.prepare("SELECT COUNT(*) AS count FROM liked_songs");
 
-export function addLikedSong({ title, artist = "", album = "", sourceId }) {
-  return insertLikedSong.run({ title, artist, album, source_id: sourceId });
+export function addLikedSong({ title, artist = "", album = "", sourceId, coverUrl = "" }) {
+  return insertLikedSong.run({ title, artist, album, source_id: sourceId, cover_url: coverUrl });
 }
 
 export function removeLikedSong(sourceId) {
