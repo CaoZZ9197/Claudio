@@ -398,6 +398,13 @@ async function executeDjResponse(djParams) {
  */
 export async function handleContinueRadio() {
   const session = getSession();
+
+  // 如果是喜欢列表模式，从 likedList 续播
+  if (session?.source === "liked" && session.likedList?.length > 0) {
+    return handleContinueFromLikedList(session);
+  }
+
+  // 原有的 radio 续播逻辑
   const prompt = await buildContinuePrompt(session);
 
   let fullText = "";
@@ -448,6 +455,46 @@ export async function handleContinueRadio() {
     session: session ? { description: session.description } : null,
     say: response.params?.say || null,
     reason: response.params?.reason || null,
+  };
+}
+
+// ── Liked list continuation ─────────────────────────────────────────────────
+
+/**
+ * 从喜欢列表续播
+ */
+function handleContinueFromLikedList(session) {
+  const liked = session.likedList || [];
+  const currentIndex = session.likedIndex || 0;
+  const playedIds = new Set(session.playedIds || []);
+
+  // 从 currentIndex 开始构建队列
+  const queue = [];
+  let attempts = 0;
+  const maxAttempts = liked.length * 2; // 防止死循环
+
+  while (queue.length < 5 && attempts < maxAttempts) {
+    attempts++;
+    const song = liked[currentIndex % liked.length];
+    if (!playedIds.has(song.originalId)) {
+      queue.push({
+        song,
+        audioUrl: null,
+        message: `即将播放：${song.title} - ${song.artist}`,
+      });
+      playedIds.add(song.originalId); // 暂时标记为已播放，避免同一首歌重复入队
+    }
+    // 更新 index（循环）
+    const nextIndex = (currentIndex + 1) % liked.length;
+    if (nextIndex === currentIndex) break; // 只有一首歌的情况
+    session.likedIndex = nextIndex;
+  }
+
+  return {
+    queue,
+    session: { description: "喜欢列表", source: "liked", likedList: liked },
+    say: null,
+    reason: null,
   };
 }
 
