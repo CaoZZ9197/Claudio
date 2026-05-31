@@ -34,10 +34,16 @@ db.exec(`
     artist TEXT NOT NULL DEFAULT '',
     album TEXT NOT NULL DEFAULT '',
     source_id TEXT NOT NULL UNIQUE,
-    cover_url TEXT NOT NULL DEFAULT '',
     liked_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+// Migration: add cover_url if missing (for existing databases)
+try {
+  db.exec("ALTER TABLE liked_songs ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''");
+} catch (e) {
+  // column may already exist or table doesn't exist yet, ignore
+}
 
 // ── Messages ────────────────────────────────────────────────────────────────
 

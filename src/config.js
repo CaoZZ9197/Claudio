@@ -56,6 +56,7 @@ const config = Object.freeze({
     data: resolve("data"),
     prompts: resolve("prompts"),
     frontend: resolve("src/frontend"),
+    learned: join(claudioHome, "learned"),
   }),
 });
 

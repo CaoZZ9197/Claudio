@@ -15,6 +15,7 @@ let ttsMediaSource = null;
 let ttsSourceBuffer = null;
 let ttsSbPending = []; // SourceBuffer 繁忙时暂存 chunk
 let musicQueue = [];          // 待播放歌曲队列
+let playHistory = [];        // 已播放歌曲历史（用于上一曲）
 let isMusicPlaying = false;   // 当前是否正在播放音乐（区别于 TTS）
 let fetchGeneration = 0;      // 续播请求代际，队列替换时递增，过期响应直接丢弃
 let isTtsActive = false;         // TTS 语音播报进行中
@@ -456,6 +457,26 @@ function playNextInQueue() {
 }
 
 /**
+ * 播放音乐队列中的上一首
+ */
+function playPrevInQueue() {
+  if (playHistory.length === 0) return;
+  const prev = playHistory.pop();
+  if (!prev) return;
+  // 将当前歌曲放回队列头部
+  if (currentSong) {
+    musicQueue.unshift({ song: currentSong, audioUrl: null });
+    renderQueue();
+  }
+  // 播放上一首
+  const audioUrl = prev.audioUrl || (prev.originalId ? `/api/audio/${prev.originalId}` : null);
+  if (audioUrl) {
+    updateNowPlaying(prev, "playing");
+    playAudio(audioUrl);
+  }
+}
+
+/**
  * 自动续播：从服务端获取更多匹配当前电台会话的歌曲。
  * 使用代际计数器防止旧请求污染已替换的队列。
  */
@@ -572,6 +593,10 @@ progressBar.addEventListener("input", () => {
 // ── Now Playing Updates ───────────────────────────────────────────────────────
 
 function updateNowPlaying(track, state) {
+  // 记录播放历史（切到新歌曲时）
+  if (track && currentSong && state === "playing") {
+    playHistory.push(currentSong);
+  }
   currentSong = track;
 
   // 检查歌曲喜欢状态
@@ -618,6 +643,8 @@ function updatePlayButtons(state) {
 
 document.getElementById("btn-play").addEventListener("click", () => togglePlay());
 document.getElementById("btn-player-play").addEventListener("click", () => togglePlay());
+document.getElementById("btn-prev").addEventListener("click", () => playPrevInQueue());
+document.getElementById("btn-next").addEventListener("click", () => playNextInQueue());
 const btnVolume = document.getElementById("btn-volume");
 if (btnVolume) {
   btnVolume.addEventListener("click", () => {

@@ -9,6 +9,7 @@ import config from "./config.js";
 import { saveMessage, getPlayedSongIds, getLikedSongs } from "./db.js";
 import { getCurrentWeather } from "./external/weather.js";
 import { getTodayEvents } from "./external/calendar.js";
+import { processLearn } from "./taste-learner.js";
 
 // ── Intent classification ─────────────────────────────────────────────────────
 
@@ -217,7 +218,7 @@ async function handleChatMessage(message) {
     || response.params?.reason
     || response.action;
   saveMessage("assistant", replyText);
-
+  processLearn().catch((err) => console.warn("[router] taste-learn error:", err.message));
   return response;
 }
 
@@ -877,6 +878,7 @@ export async function routeMessageStream(message, emitter) {
   const replyText = response.params?.say || response.params?.text || response.params?.reason || fullText;
   const sayText = response.params?.say || response.params?.text || "";
   saveMessage("assistant", replyText);
+  processLearn().catch((err) => console.warn("[router] taste-learn error:", err.message));
 
   // 打印回复内容
   console.log(`[router] Claude 回复: ${replyText}`);

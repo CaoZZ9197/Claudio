@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import config from "./config.js";
 import { getRecentMessages } from "./db.js";
 import { getCached } from "./cache.js";
+import { loadMergedTasteProfile, loadMergedMoodRules, loadMergedRoutines } from "./taste-learner.js";
 
 const TASTE_FILES = {
   taste: "taste.md",
@@ -57,7 +58,16 @@ async function loadTasteProfiles() {
   for (let i = 0; i < entries.length; i++) {
     const [key, filename] = entries[i];
     if (contents[i] !== null) {
-      results[key] = contents[i];
+      // Merge learned data into original taste profile
+      let content = contents[i];
+      if (key === "taste") {
+        content = await loadMergedTasteProfile(content);
+      } else if (key === "moodRules") {
+        content = await loadMergedMoodRules(content);
+      } else if (key === "routines") {
+        content = await loadMergedRoutines(content);
+      }
+      results[key] = content;
     } else {
       missing.push(filename);
     }
